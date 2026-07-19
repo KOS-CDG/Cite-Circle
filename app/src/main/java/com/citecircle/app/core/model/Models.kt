@@ -156,10 +156,12 @@ data class Conversation(
 // AI Review
 // ──────────────────────────────────────────────────────────────────────────────
 
+@Serializable
 enum class Severity {
     MINOR, MODERATE, NEEDS_ATTENTION
 }
 
+@Serializable
 data class AiSuggestion(
     val id: String,
     val section: String,
@@ -168,6 +170,7 @@ data class AiSuggestion(
     val isAddressed: Boolean = false
 )
 
+@Serializable
 data class AiReviewReport(
     val score: Int,            // 0–100 overall readiness
     val structure: Int,        // 0–100

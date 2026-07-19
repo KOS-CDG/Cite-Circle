@@ -359,7 +359,7 @@ class FakeMessageRepository @Inject constructor(
 
     private suspend fun getAiReply(flow: MutableStateFlow<List<Message>>) {
         try {
-            val modelId = "accounts/fireworks/models/llama-v3p1-70b-instruct"
+            val modelId = "accounts/fireworks/models/gpt-oss-120b"
             val systemPrompt = """
                 You are CiteCircle AI Copilot, a helpful and highly knowledgeable assistant for academic researchers and students.
                 Your task is to answer questions about research, literature reviews, methodology, statistics, paper writing, and academic publishing.

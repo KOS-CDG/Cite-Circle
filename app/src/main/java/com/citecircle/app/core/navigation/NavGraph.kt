@@ -41,10 +41,13 @@ import com.citecircle.app.feature.circles.CirclesScreen
 import com.citecircle.app.feature.feed.CommentThreadScreen
 import com.citecircle.app.feature.feed.FeedScreen
 import com.citecircle.app.feature.messages.ChatScreen
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.citecircle.app.feature.messages.ConversationListScreen
+import com.citecircle.app.feature.messages.MessagesViewModel
 import com.citecircle.app.feature.messages.NewMessageScreen
 import com.citecircle.app.feature.network.NetworkScreen
 import com.citecircle.app.feature.notifications.NotificationsScreen
+import com.citecircle.app.feature.notifications.NotificationsViewModel
 import com.citecircle.app.feature.onboarding.AuthScreen
 import com.citecircle.app.feature.onboarding.OnboardingScreen
 import com.citecircle.app.feature.onboarding.ProfileSetupScreen
@@ -82,7 +85,18 @@ fun CiteCircleNavHost(
                 dest.hasRoute(NetworkRoute::class)
     } ?: false
 
-    val unreadNotifications = 3 // In real app this comes from a ViewModel
+    val notificationsViewModel: NotificationsViewModel = hiltViewModel()
+    val messagesViewModel: MessagesViewModel = hiltViewModel()
+
+    val notifications by notificationsViewModel.notifications.collectAsState()
+    val conversations by messagesViewModel.conversations.collectAsState()
+
+    val unreadNotifications = remember(notifications) {
+        notifications.count { !it.isRead }
+    }
+    val unreadMessages = remember(conversations) {
+        conversations.sumOf { it.unreadCount }
+    }
 
     Scaffold(
         topBar = {},   // Floating bar is drawn inside Box below
@@ -298,8 +312,9 @@ fun CiteCircleNavHost(
             CcTopBar(
                 onSearchClick = { navController.navigate(SearchRoute) },
                 onNotificationsClick = { navController.navigate(NotificationsRoute) },
-                onMessagesClick = { navController.navigate(MessagesRoute) },
                 notificationCount = unreadNotifications,
+                onMessagesClick = { navController.navigate(MessagesRoute) },
+                messageCount = unreadMessages,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
@@ -336,6 +351,7 @@ fun CcTopBar(
     onNotificationsClick: () -> Unit,
     onMessagesClick: () -> Unit,
     notificationCount: Int = 0,
+    messageCount: Int = 0,
     modifier: Modifier = Modifier
 ) {
     // Detect dark mode: dark surface has red channel near 0, light surface is near 1
@@ -407,15 +423,27 @@ fun CcTopBar(
             }
         }
 
-        IconButton(
-            onClick = onMessagesClick,
-            modifier = Modifier.semantics { contentDescription = "Messages" }
-        ) {
-            Icon(
-                Icons.Outlined.MailOutline,
-                contentDescription = "Messages",
-                tint = MaterialTheme.ccColors.inkNavy
-            )
+        Spacer(modifier = Modifier.width(4.dp))
+
+        Box {
+            IconButton(
+                onClick = onMessagesClick,
+                modifier = Modifier.semantics { contentDescription = "Messages" }
+            ) {
+                Icon(
+                    Icons.Outlined.ChatBubbleOutline,
+                    contentDescription = null,
+                    tint = MaterialTheme.ccColors.inkNavy
+                )
+            }
+            if (messageCount > 0) {
+                CcBadge(
+                    count = messageCount,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = (-4).dp, y = 4.dp)
+                )
+            }
         }
     }
 }

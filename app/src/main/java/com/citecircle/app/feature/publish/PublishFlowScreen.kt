@@ -158,9 +158,10 @@ fun PublishFlowScreen(
                     )
                     2 -> Step2Details(
                         draft = draft,
-                        onDraftChange = { viewModel.updateDraft { it } },
+                        onDraftChange = { updated -> viewModel.updateDraft { updated } },
                         onBack = { viewModel.setStep(1) },
-                        onContinue = {
+                        onContinue = { updated ->
+                            viewModel.updateDraft { updated }
                             viewModel.setStep(3)
                             viewModel.runAiReview {}
                         }
@@ -285,9 +286,9 @@ fun Step1ChooseType(
 @Composable
 fun Step2Details(
     draft: PaperDraft,
-    onDraftChange: () -> Unit,
+    onDraftChange: (PaperDraft) -> Unit,
     onBack: () -> Unit,
-    onContinue: () -> Unit
+    onContinue: (PaperDraft) -> Unit
 ) {
     var title by remember { mutableStateOf(draft.title) }
     var abstract by remember { mutableStateOf(draft.abstract) }
@@ -312,7 +313,10 @@ fun Step2Details(
 
         CcTextField(
             value = title,
-            onValueChange = { title = it },
+            onValueChange = {
+                title = it
+                onDraftChange(draft.copy(title = title, abstract = abstract, pdfFileName = pdfName))
+            },
             label = "Paper Title",
             placeholder = "e.g. Situated Cognition in AI-Augmented workspaces",
             modifier = Modifier.fillMaxWidth()
@@ -322,7 +326,10 @@ fun Step2Details(
 
         CcTextField(
             value = abstract,
-            onValueChange = { abstract = it },
+            onValueChange = {
+                abstract = it
+                onDraftChange(draft.copy(title = title, abstract = abstract, pdfFileName = pdfName))
+            },
             label = "Abstract Summary",
             singleLine = false,
             maxLines = 6,
@@ -350,14 +357,20 @@ fun Step2Details(
                     Text(text = pdfName!!, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                     Text(text = "2.4 MB", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.ccColors.marginGray)
                 }
-                IconButton(onClick = { pdfName = null }) {
+                IconButton(onClick = {
+                    pdfName = null
+                    onDraftChange(draft.copy(title = title, abstract = abstract, pdfFileName = null))
+                }) {
                     Icon(Icons.Filled.Close, contentDescription = "Remove PDF", tint = CcColors.CoralPop)
                 }
             }
         } else {
             CcSecondaryButton(
                 text = "Upload manuscript PDF",
-                onClick = { pdfName = "Situated_Cognition_Paper_Draft.pdf" },
+                onClick = {
+                    pdfName = "Situated_Cognition_Paper_Draft.pdf"
+                    onDraftChange(draft.copy(title = title, abstract = abstract, pdfFileName = pdfName))
+                },
                 icon = Icons.Filled.Add,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -374,8 +387,8 @@ fun Step2Details(
             CcPrimaryButton(
                 text = "Continue",
                 onClick = {
-                    draft.copy(title = title, abstract = abstract, pdfFileName = pdfName)
-                    onContinue()
+                    val updated = draft.copy(title = title, abstract = abstract, pdfFileName = pdfName)
+                    onContinue(updated)
                 },
                 enabled = title.isNotBlank() && abstract.isNotBlank() && pdfName != null,
                 modifier = Modifier.weight(1f)

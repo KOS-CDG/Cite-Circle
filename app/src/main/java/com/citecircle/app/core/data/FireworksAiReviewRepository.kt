@@ -32,7 +32,7 @@ class FireworksAiReviewRepository @Inject constructor(
 
             _progress.value = AiReviewStage.InProgress("Contacting Fireworks.ai service...", 3, 6)
 
-            val modelId = "accounts/fireworks/models/llama-v3p1-70b-instruct"
+            val modelId = "accounts/fireworks/models/gpt-oss-120b"
             val systemPrompt = """
                 You are an expert peer reviewer for academic manuscripts. Your job is to critique the provided title and abstract of a research draft.
                 Analyze the draft on five key criteria:
@@ -51,14 +51,16 @@ class FireworksAiReviewRepository @Inject constructor(
                   "suggestions": [
                     {
                       "id": "s1",
-                      "section": "Abstract" | "Related Work" | "Methodology" | "Results" | "Discussion" | "Conclusion",
+                      "section": "Abstract",
                       "text": "Detailed, specific, actionable feedback text.",
-                      "severity": "MINOR" | "MODERATE" | "NEEDS_ATTENTION",
+                      "severity": "MODERATE",
                       "isAddressed": false
                     }
                   ]
                 }
-                Provide between 3 to 6 suggestions. Do not include any explanation, markdown packaging, or text outside the JSON object itself.
+                Provide between 3 to 6 suggestions. Section must be one of: Abstract, Related Work, Methodology, Results, Discussion, Conclusion.
+                Severity must be one of: MINOR, MODERATE, NEEDS_ATTENTION.
+                Do not include any explanation, markdown packaging, or text outside the JSON object itself.
             """.trimIndent()
 
             val userContent = """
@@ -88,8 +90,14 @@ class FireworksAiReviewRepository @Inject constructor(
 
             _progress.value = AiReviewStage.InProgress("Parsing suggestions & scores...", 6, 6)
             
-            // Clean up potentially wrapped markdown code blocks if the model ignores the instruction
-            val cleanJson = responseText.trim().removeSurrounding("```json", "```").trim()
+            // Extract JSON object safely from response string
+            val jsonStart = responseText.indexOf('{')
+            val jsonEnd = responseText.lastIndexOf('}')
+            val cleanJson = if (jsonStart != -1 && jsonEnd != -1 && jsonEnd > jsonStart) {
+                responseText.substring(jsonStart, jsonEnd + 1)
+            } else {
+                responseText.trim().removeSurrounding("```json", "```").removeSurrounding("```", "```").trim()
+            }
             val report = json.decodeFromString<AiReviewReport>(cleanJson)
 
             _progress.value = AiReviewStage.Complete(report)
