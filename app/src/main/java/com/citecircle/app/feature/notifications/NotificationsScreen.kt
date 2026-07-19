@@ -35,6 +35,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.graphicsLayer
+import com.citecircle.app.core.model.User
 
 // ──────────────────────────────────────────────────────────────────────────────
 // NotificationsViewModel
@@ -70,6 +78,57 @@ class NotificationsViewModel @Inject constructor(
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// NotificationGroup
+// ──────────────────────────────────────────────────────────────────────────────
+
+data class NotificationGroup(
+    val type: NotifType,
+    val targetId: String,
+    val notifications: List<Notification>
+) {
+    val id: String = "${type.name}_$targetId"
+    val isRead: Boolean get() = notifications.all { it.isRead }
+    val latestTimestamp: Long get() = notifications.maxOf { it.timestamp }
+    val latestActor: User get() = notifications.maxByOrNull { it.timestamp }?.actor ?: notifications.first().actor
+
+    fun getSummaryText(): String {
+        if (notifications.size == 1) return notifications.first().content
+        val name = latestActor.name
+        val count = notifications.size - 1
+        val others = if (count == 1) "1 other" else "$count others"
+        return when (type) {
+            NotifType.ENDORSEMENT -> "$name and $others endorsed your post"
+            NotifType.COMMENT -> "$name and $others commented on your post"
+            NotifType.CITATION -> "$name and $others cited your paper"
+            NotifType.CIRCLE_INVITE -> "$name and $others invited you to circles"
+            NotifType.NEW_FOLLOWER -> "$name and $others started following you"
+            NotifType.CONNECTION -> "$name and $others connected with you"
+            else -> notifications.first().content
+        }
+    }
+}
+
+private fun groupNotifications(notifications: List<Notification>): List<NotificationGroup> {
+    val groupsMap = mutableMapOf<String, MutableList<Notification>>()
+    notifications.forEach { notif ->
+        val key = if (notif.targetId.isBlank()) {
+            notif.id // Unique key for ungrouped items
+        } else {
+            "${notif.type.name}_${notif.targetId}"
+        }
+        groupsMap.getOrPut(key) { mutableListOf() }.add(notif)
+    }
+    return groupsMap.values.map {
+        val sorted = it.sortedByDescending { n -> n.timestamp }
+        NotificationGroup(
+            type = sorted.first().type,
+            targetId = sorted.first().targetId,
+            notifications = sorted
+        )
+    }.sortedByDescending { it.latestTimestamp }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // NotificationsScreen Composable
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -81,6 +140,7 @@ fun NotificationsScreen(
     viewModel: NotificationsViewModel = hiltViewModel()
 ) {
     val notifications by viewModel.notifications.collectAsState()
+    var expandedGroups by remember { mutableStateOf(setOf<String>()) }
 
     Scaffold(
         topBar = {
@@ -113,23 +173,31 @@ fun NotificationsScreen(
                     subtitle = "When researchers endorse your posts, cite your papers, or invite you to circles, you'll see them here."
                 )
             } else {
+                val groupedNotifs = remember(notifications) { groupNotifications(notifications) }
+                val todayGroups = groupedNotifs.filter { it.latestTimestamp > System.currentTimeMillis() - 86_400_000L }
+                val olderGroups = groupedNotifs.filter { it.latestTimestamp <= System.currentTimeMillis() - 86_400_000L }
+
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(1.dp)
                 ) {
-                    // Today Group
-                    val todayNotifs = notifications.filter { it.timestamp > System.currentTimeMillis() - 86_400_000L }
-                    val olderNotifs = notifications.filter { it.timestamp <= System.currentTimeMillis() - 86_400_000L }
-
-                    if (todayNotifs.isNotEmpty()) {
+                    if (todayGroups.isNotEmpty()) {
                         item {
                             SectionHeader(title = "Today")
                         }
-                        items(todayNotifs, key = { it.id }) { notif ->
-                            NotificationItemRow(
-                                notification = notif,
-                                onClick = {
+                        todayGroups.forEach { group ->
+                            renderGroup(
+                                group = group,
+                                expandedGroups = expandedGroups,
+                                onToggleExpand = { id ->
+                                    expandedGroups = if (expandedGroups.contains(id)) {
+                                        expandedGroups - id
+                                    } else {
+                                        expandedGroups + id
+                                    }
+                                },
+                                onNotificationClick = { notif ->
                                     viewModel.markRead(notif.id)
                                     onNotificationClick(notif.targetId)
                                 }
@@ -137,14 +205,22 @@ fun NotificationsScreen(
                         }
                     }
 
-                    if (olderNotifs.isNotEmpty()) {
+                    if (olderGroups.isNotEmpty()) {
                         item {
                             SectionHeader(title = "Earlier")
                         }
-                        items(olderNotifs, key = { it.id }) { notif ->
-                            NotificationItemRow(
-                                notification = notif,
-                                onClick = {
+                        olderGroups.forEach { group ->
+                            renderGroup(
+                                group = group,
+                                expandedGroups = expandedGroups,
+                                onToggleExpand = { id ->
+                                    expandedGroups = if (expandedGroups.contains(id)) {
+                                        expandedGroups - id
+                                    } else {
+                                        expandedGroups + id
+                                    }
+                                },
+                                onNotificationClick = { notif ->
                                     viewModel.markRead(notif.id)
                                     onNotificationClick(notif.targetId)
                                 }
@@ -152,6 +228,40 @@ fun NotificationsScreen(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+private fun LazyListScope.renderGroup(
+    group: NotificationGroup,
+    expandedGroups: Set<String>,
+    onToggleExpand: (String) -> Unit,
+    onNotificationClick: (Notification) -> Unit
+) {
+    if (group.notifications.size == 1) {
+        item(key = group.notifications.first().id) {
+            NotificationItemRow(
+                notification = group.notifications.first(),
+                onClick = { onNotificationClick(group.notifications.first()) }
+            )
+        }
+    } else {
+        val isExpanded = expandedGroups.contains(group.id)
+        item(key = group.id) {
+            GroupHeaderRow(
+                group = group,
+                isExpanded = isExpanded,
+                onClick = { onToggleExpand(group.id) }
+            )
+        }
+        if (isExpanded) {
+            items(group.notifications, key = { it.id }) { notif ->
+                NotificationItemRow(
+                    notification = notif,
+                    onClick = { onNotificationClick(notif) },
+                    modifier = Modifier.padding(start = 24.dp) // Slight indent for grouped items
+                )
             }
         }
     }
@@ -169,34 +279,107 @@ fun SectionHeader(title: String) {
 }
 
 @Composable
-fun NotificationItemRow(
-    notification: Notification,
+fun GroupHeaderRow(
+    group: NotificationGroup,
+    isExpanded: Boolean,
     onClick: () -> Unit
 ) {
-    val icon = when (notification.type) {
-        NotifType.ENDORSEMENT -> Icons.Outlined.StarOutline
-        NotifType.COMMENT -> Icons.Outlined.ChatBubbleOutline
-        NotifType.CONNECTION -> Icons.Filled.PersonAdd
-        NotifType.CIRCLE_INVITE -> Icons.Filled.Groups
-        NotifType.AI_APPROVED -> Icons.Filled.AutoAwesome
-        NotifType.CITATION -> Icons.Filled.FormatQuote
-        NotifType.NEW_FOLLOWER -> Icons.Filled.Person
-    }
+    val arrowRotation by animateFloatAsState(
+        targetValue = if (isExpanded) 180f else 0f,
+        animationSpec = tween(durationMillis = 200),
+        label = "group_arrow"
+    )
 
-    val iconColor = when (notification.type) {
-        NotifType.ENDORSEMENT -> CcColors.HighlighterYellow
-        NotifType.COMMENT -> CcColors.CircleBlue
-        NotifType.CONNECTION -> CcColors.SeafoamTeal
-        NotifType.CIRCLE_INVITE -> CcColors.InkNavy
-        NotifType.AI_APPROVED -> CcColors.SeafoamTeal
-        NotifType.CITATION -> CcColors.HighlighterYellow
-        NotifType.NEW_FOLLOWER -> CcColors.CircleBlue
-    }
+    val icon = getNotificationIcon(group.type)
+    val iconColor = getNotificationIconColor(group.type)
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .background(if (group.isRead) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.08f))
+            .drawBehind {
+                if (!group.isRead) {
+                    drawRect(
+                        color = CcColors.CircleBlue,
+                        topLeft = Offset.Zero,
+                        size = Size(4.dp.toPx(), size.height)
+                    )
+                }
+            }
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Notification Badge icon
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(iconColor.copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(imageVector = icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(18.dp))
+        }
+
+        Spacer(modifier = Modifier.width(16.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = group.getSummaryText(),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = if (!group.isRead) FontWeight.Bold else FontWeight.Normal
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "${group.notifications.size} updates",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = CcColors.CircleBlue,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = " • ",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.ccColors.marginGray
+                )
+                CcTimestamp(timestamp = group.latestTimestamp)
+            }
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        Icon(
+            imageVector = Icons.Filled.KeyboardArrowDown,
+            contentDescription = if (isExpanded) "Collapse" else "Expand",
+            tint = MaterialTheme.ccColors.marginGray,
+            modifier = Modifier.graphicsLayer { rotationZ = arrowRotation }
+        )
+    }
+}
+
+@Composable
+fun NotificationItemRow(
+    notification: Notification,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val icon = getNotificationIcon(notification.type)
+    val iconColor = getNotificationIconColor(notification.type)
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
             .background(if (notification.isRead) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.08f))
+            .drawBehind {
+                if (!notification.isRead) {
+                    drawRect(
+                        color = CcColors.CircleBlue,
+                        topLeft = Offset.Zero,
+                        size = Size(4.dp.toPx(), size.height)
+                    )
+                }
+            }
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -234,5 +417,29 @@ fun NotificationItemRow(
                     .background(CcColors.CoralPop)
             )
         }
+    }
+}
+
+private fun getNotificationIcon(type: NotifType): androidx.compose.ui.graphics.vector.ImageVector {
+    return when (type) {
+        NotifType.ENDORSEMENT -> Icons.Outlined.StarOutline
+        NotifType.COMMENT -> Icons.Outlined.ChatBubbleOutline
+        NotifType.CONNECTION -> Icons.Filled.PersonAdd
+        NotifType.CIRCLE_INVITE -> Icons.Filled.Groups
+        NotifType.AI_APPROVED -> Icons.Filled.AutoAwesome
+        NotifType.CITATION -> Icons.Filled.FormatQuote
+        NotifType.NEW_FOLLOWER -> Icons.Filled.Person
+    }
+}
+
+private fun getNotificationIconColor(type: NotifType): Color {
+    return when (type) {
+        NotifType.ENDORSEMENT -> CcColors.HighlighterYellow
+        NotifType.COMMENT -> CcColors.CircleBlue
+        NotifType.CONNECTION -> CcColors.SeafoamTeal
+        NotifType.CIRCLE_INVITE -> CcColors.InkNavy
+        NotifType.AI_APPROVED -> CcColors.SeafoamTeal
+        NotifType.CITATION -> CcColors.HighlighterYellow
+        NotifType.NEW_FOLLOWER -> CcColors.CircleBlue
     }
 }
