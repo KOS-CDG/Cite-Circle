@@ -10,6 +10,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -72,6 +73,9 @@ class FeedViewModel @Inject constructor(
     private val _selectedFilter = MutableStateFlow("For You")
     val selectedFilter = _selectedFilter.asStateFlow()
 
+    private val _selectedTopic = MutableStateFlow("All Topics")
+    val selectedTopic = _selectedTopic.asStateFlow()
+
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing = _isRefreshing.asStateFlow()
 
@@ -90,22 +94,41 @@ class FeedViewModel @Inject constructor(
         }
     }
 
-    val uiState: StateFlow<FeedUiState> = combine(_postsFlow, _selectedFilter, _isRefreshing) { posts, filter, refreshing ->
+    val uiState: StateFlow<FeedUiState> = combine(
+        _postsFlow,
+        _selectedFilter,
+        _selectedTopic,
+        _isRefreshing
+    ) { posts, filter, topic, refreshing ->
         if (refreshing) {
             FeedUiState.Loading
         } else {
-            val filtered = when (filter) {
+            val baseFiltered = when (filter) {
                 "Following" -> posts.filter { it.author.isFollowing }
                 "My Field" -> posts.filter { it.author.fieldOfStudy == "Human-Computer Interaction" } // Match current user field
                 "Trending" -> posts.sortedByDescending { it.endorseCount }
                 else -> posts // For You
             }
-            if (filtered.isEmpty()) FeedUiState.Empty else FeedUiState.Success(filtered)
+            val finalFiltered = if (topic == "All Topics") {
+                baseFiltered
+            } else {
+                baseFiltered.filter { post ->
+                    post.content.contains(topic, ignoreCase = true) ||
+                    post.attachedPaper?.fieldTags?.any { it.equals(topic, ignoreCase = true) } == true
+                }
+            }
+            if (finalFiltered.isEmpty()) FeedUiState.Empty else FeedUiState.Success(finalFiltered)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), FeedUiState.Loading)
 
     fun setFilter(filter: String) {
         _selectedFilter.value = filter
+        // Reset topic when changing main filters to keep feed state consistent
+        _selectedTopic.value = "All Topics"
+    }
+
+    fun setTopic(topic: String) {
+        _selectedTopic.value = topic
     }
 
     fun refreshFeed() {
@@ -137,6 +160,17 @@ class FeedViewModel @Inject constructor(
 
 val feedFilters = listOf("For You", "Following", "My Field", "Trending")
 
+val trendingTopics = listOf(
+    "All Topics",
+    "Machine Learning",
+    "Human-Computer Interaction",
+    "Genomics",
+    "Quantum Physics",
+    "Cognitive Science",
+    "Health Equity",
+    "Topology"
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FeedScreen(
@@ -162,7 +196,7 @@ fun FeedScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surface)
-                .padding(vertical = 8.dp, horizontal = 16.dp),
+                .padding(top = 8.dp, bottom = 4.dp, start = 16.dp, end = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             feedFilters.forEach { filter ->
@@ -171,6 +205,60 @@ fun FeedScreen(
                     selected = selectedFilter == filter,
                     onClick = { viewModel.setFilter(filter) }
                 )
+            }
+        }
+
+        // Horizontally scrollable topics chip row
+        val selectedTopic by viewModel.selectedTopic.collectAsState()
+        LazyRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(bottom = 8.dp, start = 16.dp, end = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(end = 16.dp)
+        ) {
+            items(trendingTopics) { topic ->
+                val isSelected = selectedTopic == topic
+                val backgroundTransition by animateColorAsState(
+                    targetValue = if (isSelected) CcColors.CircleBlue.copy(alpha = 0.15f) else Color.Transparent,
+                    label = "topic_bg"
+                )
+                val borderTransition by animateColorAsState(
+                    targetValue = if (isSelected) CcColors.CircleBlue else MaterialTheme.ccColors.divider,
+                    label = "topic_border"
+                )
+                val textTransition by animateColorAsState(
+                    targetValue = if (isSelected) CcColors.CircleBlue else MaterialTheme.colorScheme.onSurface,
+                    label = "topic_text"
+                )
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(backgroundTransition)
+                        .border(1.dp, borderTransition, RoundedCornerShape(20.dp))
+                        .clickable { viewModel.setTopic(topic) }
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (isSelected) {
+                            Icon(
+                                imageVector = Icons.Outlined.Check,
+                                contentDescription = null,
+                                modifier = Modifier.size(12.dp).padding(end = 4.dp),
+                                tint = CcColors.CircleBlue
+                            )
+                        }
+                        Text(
+                            text = topic,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = textTransition
+                        )
+                    }
+                }
             }
         }
 
