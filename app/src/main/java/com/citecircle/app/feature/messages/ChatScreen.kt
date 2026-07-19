@@ -64,15 +64,28 @@ fun parseMarkdownToAnnotatedString(text: String): AnnotatedString {
         cleanText = cleanText.removeSurrounding("```", "```").trim()
     }
 
-    // Convert bullet symbols '* ' or '- ' at line starts into clean bullet point '• '
-    val processedLines = cleanText.lines().joinToString("\n") { line ->
-        val trimmed = line.trimStart()
+    // Filter out scratchpad lines and clean headers/bullets
+    val processedLines = cleanText.lines().mapNotNull { line ->
+        var trimmed = line.trim()
+        val lower = trimmed.lowercase()
+
+        if (lower.startsWith("analyze the request") ||
+            lower.startsWith("identify the core content") ||
+            lower.startsWith("persona:") ||
+            lower.startsWith("constraints:")) {
+            return@mapNotNull null
+        }
+
+        if (trimmed.startsWith("#")) {
+            trimmed = trimmed.replace(Regex("^#+\\s*"), "")
+        }
+
         if (trimmed.startsWith("* ") || trimmed.startsWith("- ")) {
             "•  " + trimmed.substring(2)
         } else {
-            line
+            trimmed
         }
-    }
+    }.joinToString("\n")
 
     return buildAnnotatedString {
         var currentIndex = 0
@@ -102,8 +115,8 @@ fun parseMarkdownToAnnotatedString(text: String): AnnotatedString {
                     }
                 }
                 codeContent != null -> {
-                    withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, background = Color.Black.copy(alpha = 0.08f))) {
-                        append(" $codeContent ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) {
+                        append(codeContent)
                     }
                 }
                 else -> {

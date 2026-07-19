@@ -17,11 +17,14 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
+import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Response
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
+import java.util.ArrayDeque
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 
@@ -100,6 +103,57 @@ object DataModule {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Network Rate Limiter Interceptor
+// ──────────────────────────────────────────────────────────────────────────────
+
+class RateLimitInterceptor(
+    private val requestsPerMinute: Int = 15,
+    private val minIntervalMs: Long = 2000L
+) : Interceptor {
+    private val lock = Any()
+    private var lastRequestTime = 0L
+    private val requestTimestamps = ArrayDeque<Long>()
+
+    override fun intercept(chain: Interceptor.Chain): Response {
+        synchronized(lock) {
+            val now = System.currentTimeMillis()
+
+            // 1. Clean timestamps older than 60 seconds (1 minute window)
+            while (requestTimestamps.isNotEmpty() && (now - requestTimestamps.first) > 60000L) {
+                requestTimestamps.removeFirst()
+            }
+
+            // 2. Enforce Requests Per Minute limit
+            if (requestTimestamps.size >= requestsPerMinute) {
+                val oldestInWindow = requestTimestamps.first
+                val waitMs = 60000L - (now - oldestInWindow)
+                if (waitMs > 0) {
+                    try {
+                        Thread.sleep(waitMs)
+                    } catch (_: InterruptedException) {}
+                }
+            }
+
+            // 3. Enforce minimum interval between consecutive requests
+            val currentTime = System.currentTimeMillis()
+            val elapsedSinceLast = currentTime - lastRequestTime
+            if (elapsedSinceLast < minIntervalMs) {
+                val delayNeeded = minIntervalMs - elapsedSinceLast
+                try {
+                    Thread.sleep(delayNeeded)
+                } catch (_: InterruptedException) {}
+            }
+
+            val executionTime = System.currentTimeMillis()
+            lastRequestTime = executionTime
+            requestTimestamps.addLast(executionTime)
+        }
+
+        return chain.proceed(chain.request())
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Network Module (Fireworks.ai)
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -120,6 +174,7 @@ object NetworkModule {
     fun provideOkHttpClient(): OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(90, TimeUnit.SECONDS)
+        .addInterceptor(RateLimitInterceptor(requestsPerMinute = 15, minIntervalMs = 2000L))
         .addInterceptor { chain ->
             chain.proceed(
                 chain.request().newBuilder()

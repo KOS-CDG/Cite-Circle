@@ -359,15 +359,15 @@ class FakeMessageRepository @Inject constructor(
 
     private suspend fun getAiReply(flow: MutableStateFlow<List<Message>>) {
         try {
-            val modelId = "accounts/fireworks/models/gpt-oss-120b"
+            val modelId = "accounts/fireworks/models/deepseek-v4-pro"
             val systemPrompt = """
-                You are CiteCircle AI Copilot, a brilliant academic research assistant for students, scientists, and university researchers.
+                You are CiteCircle AI Copilot, a helpful academic research assistant for students, scientists, and university researchers.
                 Your job is to assist with research, literature reviews, methodology, statistics, paper writing, and academic publishing.
                 
                 Guidelines:
-                1. Respond in clear, elegant, readable conversational prose.
-                2. DO NOT wrap your response in markdown code blocks like ``` or ```text unless specifically asked for code.
-                3. Do not output meta-reasoning, step-by-step thinking, or internal analysis.
+                1. Respond in clear, natural, friendly conversational prose.
+                2. DO NOT output meta-reasoning, step-by-step planning, or internal scratchpad analysis (such as 'Analyze the Request:').
+                3. DO NOT wrap your response in markdown code blocks like ``` or ```text unless specifically asked for code.
                 4. Use bold text and bullet points naturally for readability.
                 5. Keep answers focused, encouraging, and academically rigorous.
             """.trimIndent()
@@ -389,12 +389,21 @@ class FakeMessageRepository @Inject constructor(
             var replyText = response.choices.firstOrNull()?.message?.content
                 ?: "I apologize, but I couldn't formulate a reply. Please try again."
 
-            replyText = replyText.trim()
+            // Filter out any accidental scratchpad planning lines or meta analysis
+            val cleanLines = replyText.lines().filterNot { line ->
+                val lower = line.trim().lowercase()
+                lower.startsWith("analyze the request") ||
+                lower.startsWith("identify the core content") ||
+                lower.startsWith("persona:") ||
+                lower.startsWith("constraints:")
+            }
+            replyText = cleanLines.joinToString("\n").trim()
+
             if (replyText.startsWith("```markdown")) {
                 replyText = replyText.removeSurrounding("```markdown", "```").trim()
             } else if (replyText.startsWith("```text")) {
                 replyText = replyText.removeSurrounding("```text", "```").trim()
-            } else if (replyText.startsWith("```")) {
+            } else if (replyText.startsWith("```") && replyText.endsWith("```")) {
                 replyText = replyText.removeSurrounding("```", "```").trim()
             }
 
