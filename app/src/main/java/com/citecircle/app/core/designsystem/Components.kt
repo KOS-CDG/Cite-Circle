@@ -4,6 +4,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -226,7 +227,7 @@ fun CcPrimaryButton(
 
     Button(
         onClick = onClick,
-        modifier = modifier.scale(scale).height(52.dp),
+        modifier = modifier.scale(scale).defaultMinSize(minHeight = 52.dp),
         enabled = enabled && !isLoading,
         interactionSource = interactionSource,
         shape = RoundedCornerShape(12.dp),
@@ -278,7 +279,7 @@ fun CcSecondaryButton(
 
     OutlinedButton(
         onClick = onClick,
-        modifier = modifier.scale(scale).height(52.dp),
+        modifier = modifier.scale(scale).defaultMinSize(minHeight = 52.dp),
         enabled = enabled,
         interactionSource = interactionSource,
         shape = RoundedCornerShape(12.dp),
@@ -308,37 +309,45 @@ fun CcChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val bgColor by animateColorAsState(
-        targetValue = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-        label = "chip_bg"
-    )
     val textColor by animateColorAsState(
-        targetValue = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+        targetValue = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
         label = "chip_text"
     )
+    val bgColor by animateColorAsState(
+        targetValue = if (selected)
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+        else
+            MaterialTheme.colorScheme.surfaceVariant,
+        label = "chip_bg"
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (selected)
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+        else
+            Color.Transparent,
+        label = "chip_border"
+    )
 
-    if (selected) {
-        HighlighterSweep {
-            Box(
-                modifier = modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(bgColor)
-                    .clickable(onClick = onClick)
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-            ) {
-                Text(text = label, color = textColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
-            }
-        }
-    } else {
-        Box(
-            modifier = modifier
-                .clip(RoundedCornerShape(20.dp))
-                .background(bgColor)
-                .clickable(onClick = onClick)
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-        ) {
-            Text(text = label, color = textColor, style = MaterialTheme.typography.labelMedium)
-        }
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(bgColor)
+            .then(
+                if (selected) Modifier.border(
+                    width = 1.5.dp,
+                    color = borderColor,
+                    shape = RoundedCornerShape(20.dp)
+                ) else Modifier
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        Text(
+            text = label,
+            color = textColor,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+        )
     }
 }
 

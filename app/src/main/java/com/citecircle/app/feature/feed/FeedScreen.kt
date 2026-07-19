@@ -1,20 +1,41 @@
 package com.citecircle.app.feature.feed
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.citecircle.app.core.data.PostRepository
+import com.citecircle.app.core.data.UserRepository
 import com.citecircle.app.core.designsystem.*
 import com.citecircle.app.core.model.Post
+import com.citecircle.app.core.model.User
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +46,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import kotlinx.coroutines.flow.collect
 
 // ──────────────────────────────────────────────────────────────────────────────
 // FeedUiState & FeedViewModel
@@ -39,8 +62,12 @@ sealed interface FeedUiState {
 
 @HiltViewModel
 class FeedViewModel @Inject constructor(
-    private val postRepository: PostRepository
+    private val postRepository: PostRepository,
+    userRepository: UserRepository
 ) : ViewModel() {
+
+    val currentUser = userRepository.getCurrentUser()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     private val _selectedFilter = MutableStateFlow("For You")
     val selectedFilter = _selectedFilter.asStateFlow()
@@ -49,6 +76,19 @@ class FeedViewModel @Inject constructor(
     val isRefreshing = _isRefreshing.asStateFlow()
 
     private val _postsFlow = postRepository.getFeedPosts()
+
+    private var lastPostsSize = -1
+
+    init {
+        viewModelScope.launch {
+            _postsFlow.collect { posts ->
+                if (lastPostsSize != -1 && posts.size > lastPostsSize) {
+                    refreshFeed()
+                }
+                lastPostsSize = posts.size
+            }
+        }
+    }
 
     val uiState: StateFlow<FeedUiState> = combine(_postsFlow, _selectedFilter, _isRefreshing) { posts, filter, refreshing ->
         if (refreshing) {
@@ -97,17 +137,20 @@ class FeedViewModel @Inject constructor(
 
 val feedFilters = listOf("For You", "Following", "My Field", "Trending")
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FeedScreen(
     onPostClick: (String) -> Unit,
     onPaperClick: (String) -> Unit,
     onUserClick: (String) -> Unit,
     onCircleClick: (String) -> Unit,
+    onComposePost: () -> Unit = {},
     viewModel: FeedViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val selectedFilter by viewModel.selectedFilter.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
+    val currentUser by viewModel.currentUser.collectAsState()
 
     Column(
         modifier = Modifier
@@ -131,8 +174,20 @@ fun FeedScreen(
             }
         }
 
+        // Composer bar — tapping opens QuickPostScreen
+        FeedComposerBar(
+            currentUser = currentUser,
+            onClick = onComposePost
+        )
+
+        HorizontalDivider(color = MaterialTheme.ccColors.divider)
+
         // Pull to refresh simulation / Feed content
-        Box(modifier = Modifier.weight(1f)) {
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = { viewModel.refreshFeed() },
+            modifier = Modifier.weight(1f).fillMaxWidth()
+        ) {
             when (val state = uiState) {
                 is FeedUiState.Loading -> {
                     LazyColumn(contentPadding = PaddingValues(vertical = 12.dp)) {
@@ -178,6 +233,159 @@ fun FeedScreen(
                         onAction = { viewModel.refreshFeed() }
                     )
                 }
+            }
+        }
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// FeedComposerBar — "What's on your research mind?" entry point
+// ──────────────────────────────────────────────────────────────────────────────
+
+private val composerFlairShortcuts = listOf(
+    "❓ Question",
+    "💬 Discussion",
+    "📚 Resource"
+)
+
+@Composable
+fun FeedComposerBar(
+    currentUser: User?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isPressed) 0.98f else 1f,
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessHigh
+        ),
+        label = "composer_scale"
+    )
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .scale(scale)
+            .background(MaterialTheme.colorScheme.surface)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
+            .semantics { contentDescription = "Compose a new post" }
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    ) {
+        // Avatar + ghost input row
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            // Avatar (or placeholder ring if user not yet loaded)
+            if (currentUser != null) {
+                CcAvatar(user = currentUser, size = 40.dp)
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                )
+            }
+
+            Spacer(Modifier.width(12.dp))
+
+            // Tappable ghost text field
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(24.dp))
+                    .border(
+                        width = 1.dp,
+                        color = MaterialTheme.ccColors.divider,
+                        shape = RoundedCornerShape(24.dp)
+                    )
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text = "What's on your research mind?",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.ccColors.marginGray
+                )
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        // Flair shortcut chips + photo shortcut
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Photo shortcut
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Icon(
+                    Icons.Outlined.Image,
+                    contentDescription = null,
+                    tint = MaterialTheme.ccColors.marginGray,
+                    modifier = Modifier.size(14.dp)
+                )
+                Text(
+                    text = "Photo",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.ccColors.marginGray,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+
+            // Cite a paper shortcut
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Icon(
+                    Icons.Outlined.FormatQuote,
+                    contentDescription = null,
+                    tint = MaterialTheme.ccColors.marginGray,
+                    modifier = Modifier.size(14.dp)
+                )
+                Text(
+                    text = "Cite paper",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.ccColors.marginGray,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+
+            // Flair shortcuts
+            composerFlairShortcuts.forEach { label ->
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.ccColors.marginGray,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                )
             }
         }
     }

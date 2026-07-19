@@ -197,9 +197,14 @@ fun ChatScreen(
                             MessageBubble(message = msg, isMine = msg.senderId == "u0")
                         }
 
-                        // typing indicator stubs representation
-                        item {
-                            TypingIndicatorBubble()
+                        // Show typing indicator only when the AI Copilot is thinking
+                        val isAiThinking = chatState.recipient.id == "ai_copilot" &&
+                                chatState.messages.isNotEmpty() &&
+                                chatState.messages.last().senderId == "u0"
+                        if (isAiThinking) {
+                            item {
+                                TypingIndicatorBubble()
+                            }
                         }
                     }
                 }

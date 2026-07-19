@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,6 +27,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -86,11 +92,12 @@ class ProfileSetupViewModel @Inject constructor(
         }
     }
 
-    fun saveProfile(name: String, institution: String, interests: List<String>, onComplete: () -> Unit) {
+    fun saveProfile(name: String, institution: String, avatarUrl: String, interests: List<String>, onComplete: () -> Unit) {
         viewModelScope.launch {
             val user = FakeDataSource.currentUser.copy(
                 name = name,
                 institution = institution,
+                avatarUrl = avatarUrl,
                 interests = interests
             )
             userRepository.updateCurrentUser(user)
@@ -120,6 +127,7 @@ fun ProfileSetupScreen(
     // Step 1 states
     var name by remember { mutableStateOf(FakeDataSource.currentUser.name) }
     var institution by remember { mutableStateOf(FakeDataSource.currentUser.institution) }
+    var avatarUrl by remember { mutableStateOf(FakeDataSource.currentUser.avatarUrl) }
 
     // Step 2 states
     var selectedInterests by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -171,7 +179,9 @@ fun ProfileSetupScreen(
                         name = name,
                         onNameChange = { name = it },
                         institution = institution,
-                        onInstitutionChange = { institution = it }
+                        onInstitutionChange = { institution = it },
+                        avatarUrl = avatarUrl,
+                        onAvatarChange = { avatarUrl = it }
                     )
                     2 -> Step2Interests(
                         selectedInterests = selectedInterests,
@@ -217,7 +227,7 @@ fun ProfileSetupScreen(
                     if (step < 3) {
                         step++
                     } else {
-                        viewModel.saveProfile(name, institution, selectedInterests.toList(), onSetupComplete)
+                        viewModel.saveProfile(name, institution, avatarUrl, selectedInterests.toList(), onSetupComplete)
                     }
                 },
                 enabled = when (step) {
@@ -236,27 +246,68 @@ fun Step1Details(
     name: String,
     onNameChange: (String) -> Unit,
     institution: String,
-    onInstitutionChange: (String) -> Unit
+    onInstitutionChange: (String) -> Unit,
+    avatarUrl: String,
+    onAvatarChange: (String) -> Unit
 ) {
+    val pickMediaLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            onAvatarChange(uri.toString())
+        }
+    }
+
     Column(
         modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Large Avatar Photo placeholder
+        // Large Avatar Photo with click upload
         Box(
             modifier = Modifier
                 .size(100.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.surface)
-                .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape),
+                .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                .clickable {
+                    pickMediaLauncher.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                    )
+                },
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                Icons.Filled.Person,
-                contentDescription = "Profile photo placeholder",
-                modifier = Modifier.size(56.dp),
-                tint = MaterialTheme.ccColors.marginGray
-            )
+            if (avatarUrl.isNotEmpty()) {
+                AsyncImage(
+                    model = avatarUrl,
+                    contentDescription = "Profile picture",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().clip(CircleShape)
+                )
+            } else {
+                Icon(
+                    Icons.Filled.Person,
+                    contentDescription = "Profile photo placeholder",
+                    modifier = Modifier.size(56.dp),
+                    tint = MaterialTheme.ccColors.marginGray
+                )
+            }
+
+            // Photo Camera Icon indicator overlay
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .align(Alignment.BottomEnd)
+                    .background(MaterialTheme.colorScheme.primary, CircleShape)
+                    .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.CameraAlt,
+                    contentDescription = "Upload photo",
+                    tint = Color.White,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(32.dp))

@@ -13,6 +13,8 @@ androidxDatastore = "1.1.1"
 coil = "2.7.0"
 kotlinxSerializationJson = "1.7.3"
 kotlinxCoroutines = "1.9.0"
+retrofit = "2.11.0"
+okhttp = "4.12.0"
 
 [libraries]
 # AndroidX Core
@@ -49,6 +51,12 @@ coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coi
 # Kotlin
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "kotlinxCoroutines" }
+
+# Network
+retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "retrofit" }
+retrofit-kotlinx-serialization = { group = "com.squareup.retrofit2", name = "converter-kotlinx-serialization", version.ref = "retrofit" }
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+okhttp-logging-interceptor = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

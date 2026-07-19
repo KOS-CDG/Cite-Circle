@@ -61,6 +61,22 @@ object FakeDataSource {
         interests = listOf("HCI", "Machine Learning", "NLP")
     )
 
+    val aiUser = User(
+        id = "ai_copilot",
+        name = "CiteCircle AI Copilot",
+        avatarUrl = "https://api.dicebear.com/8.x/bottts/svg?seed=copilot",
+        role = UserRole.RESEARCHER,
+        institution = "CiteCircle AI Lab",
+        fieldOfStudy = "Academic Research Assistant",
+        bio = "CiteCircle's research assistant. Ask me anything about literature reviews, methodology, or academic writing.",
+        orcidId = "0000-0000-1111-9999",
+        followerCount = 10000,
+        followingCount = 0,
+        citationCount = 0,
+        isVerified = true,
+        interests = listOf("AI", "Research", "Education", "Methodology")
+    )
+
     var currentUser = defaultUser
 
     val users = listOf(
@@ -1349,6 +1365,17 @@ object FakeDataSource {
 
     val conversations = listOf(
         Conversation(
+            id = "conv_ai",
+            participants = listOf(currentUser, aiUser),
+            lastMessage = Message(
+                id = "m_ai_start",
+                senderId = "ai_copilot",
+                content = "Hello! I am your CiteCircle AI Copilot. Ask me any research question, ask for paper summaries, or methodology advice.",
+                timestamp = System.currentTimeMillis() - 86_400_000L
+            ),
+            unreadCount = 0
+        ),
+        Conversation(
             id = "conv1",
             participants = listOf(currentUser, users[0]),
             lastMessage = Message(
@@ -1406,6 +1433,14 @@ object FakeDataSource {
     )
 
     fun getMessagesForConversation(convId: String): List<Message> = when (convId) {
+        "conv_ai" -> listOf(
+            Message(
+                id = "m_ai_start",
+                senderId = "ai_copilot",
+                content = "Hello! I am your CiteCircle AI Copilot. Ask me any research question, ask for paper summaries, or methodology advice.",
+                timestamp = System.currentTimeMillis() - 86_400_000L
+            )
+        )
         "conv1" -> listOf(
             Message("m1a", currentUser.id, "Hi Elena! Just saw your latest preprint on PRS calibration.", System.currentTimeMillis() - 5_400_000L),
             Message("m1b", users[0].id, "Thanks Maya! It was a big push to get it out before ASHG.", System.currentTimeMillis() - 4_800_000L),

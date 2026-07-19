@@ -76,17 +76,24 @@ class PublishViewModel @Inject constructor(
 
     fun runAiReview(onComplete: () -> Unit) {
         viewModelScope.launch {
-            _reviewProgress.value = AiReviewStage.InProgress("Reading manuscript...", 1, 6)
-            // Call simulated API
-            launch {
+            _reviewProgress.value = AiReviewStage.InProgress("Reading manuscript...", 1, 5)
+            val progressJob = launch {
                 aiReviewRepository.getReviewProgress().collect {
                     _reviewProgress.value = it
                 }
             }
-            val report = aiReviewRepository.reviewPaper(_draft.value)
-            _reviewReport.value = report
-            _reviewProgress.value = AiReviewStage.Complete(report)
-            onComplete()
+            try {
+                val report = aiReviewRepository.reviewPaper(_draft.value)
+                _reviewReport.value = report
+                _reviewProgress.value = AiReviewStage.Complete(report)
+                onComplete()
+            } catch (e: Exception) {
+                _reviewProgress.value = AiReviewStage.Error(
+                    e.message ?: "AI review failed. Please check your connection and try again."
+                )
+            } finally {
+                progressJob.cancel()
+            }
         }
     }
 
@@ -162,6 +169,7 @@ fun PublishFlowScreen(
                         progress = progress,
                         report = report,
                         onBackToEdit = { viewModel.setStep(2) },
+                        onRetry = { viewModel.runAiReview {} },
                         onPublish = {
                             viewModel.publishPaper {
                                 viewModel.setStep(4)
@@ -385,7 +393,8 @@ fun Step3AiReview(
     progress: AiReviewStage,
     report: AiReviewReport?,
     onBackToEdit: () -> Unit,
-    onPublish: () -> Unit
+    onPublish: () -> Unit,
+    onRetry: () -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
 
@@ -485,6 +494,47 @@ fun Step3AiReview(
                             CcSecondaryButton(text = "Revise Draft", onClick = onBackToEdit, modifier = Modifier.weight(1f).padding(end = 12.dp))
                             CcPrimaryButton(text = "Publish anyway", onClick = onPublish, modifier = Modifier.weight(1f))
                         }
+                    }
+                }
+            }
+            is AiReviewStage.Error -> {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(horizontal = 32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        Icons.Filled.Warning,
+                        contentDescription = "Review error",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "AI review couldn't finish",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = progress.message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.ccColors.marginGray,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        CcSecondaryButton(
+                            text = "Back to Edit",
+                            onClick = onBackToEdit,
+                            modifier = Modifier.weight(1f).padding(end = 12.dp)
+                        )
+                        CcPrimaryButton(
+                            text = "Retry Review",
+                            onClick = onRetry,
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
             }

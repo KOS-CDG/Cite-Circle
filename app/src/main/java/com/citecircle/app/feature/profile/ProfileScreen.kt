@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -91,209 +93,210 @@ fun ProfileScreen(
             is ProfileState.Success -> {
                 val user = profileState.user
 
-                Column(modifier = Modifier.fillMaxSize()) {
-                    // Header cover gradient
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(130.dp)
-                            .background(
-                                brush = Brush.horizontalGradient(
-                                    colors = listOf(CcColors.InkNavy, CcColors.CircleBlue)
-                                )
-                            )
-                    )
-
-                    // Avatar overlay details
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp)
-                            .layout { measurable, constraints ->
-                                val placeable = measurable.measure(constraints)
-                                val overlap = 40.dp.roundToPx()
-                                layout(placeable.width, (placeable.height - overlap).coerceAtLeast(0)) {
-                                    placeable.placeRelative(0, -overlap)
-                                }
-                            }
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.Bottom,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            CcAvatar(user = user, size = 80.dp)
-
-                            Spacer(modifier = Modifier.width(16.dp))
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = user.name,
-                                    fontFamily = FrauncesFamily,
-                                    fontSize = 24.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onBackground
-                                )
-
-                                Text(
-                                    text = "${user.role.displayName()} • ${user.institution}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.ccColors.marginGray
-                                )
-                            }
-
-                            CcSecondaryButton(
-                                text = "Edit",
-                                onClick = onEditProfile,
-                                modifier = Modifier.height(36.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // ORCID details stubs
-                        if (user.orcidId.isNotEmpty()) {
-                            Text(
-                                text = "ORCID: ${user.orcidId}",
-                                fontSize = 12.sp,
-                                fontFamily = JetBrainsMonoFamily,
-                                color = CcColors.SeafoamTeal,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Stats count columns row
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(24.dp)
-                        ) {
-                            StatItem(count = user.followerCount, label = "Followers")
-                            StatItem(count = user.followingCount, label = "Following")
-                            // Citations highlight count
-                            HighlighterSweep {
-                                Box(
-                                    modifier = Modifier.padding(horizontal = 4.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    StatItem(count = user.citationCount, label = "Citations")
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Bio
-                        Text(text = user.bio, style = MaterialTheme.typography.bodyMedium)
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Field Interest chips stubs row
-                        if (user.interests.isNotEmpty()) {
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                items(user.interests) { interest ->
-                                    CcChip(label = interest, selected = false, onClick = {})
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    // Tab selector
-                    CcTabRow(
-                        tabs = listOf("Papers", "Circles", "About"),
-                        selectedIndex = selectedTab,
-                        onTabSelected = { selectedTab = it },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    // Tab items lists switcher
-                    Box(modifier = Modifier.weight(1f)) {
-                        when (selectedTab) {
-                            0 -> PapersProfileTab(papers = profileState.papers, onPaperClick = onPaperClick)
-                            1 -> CirclesProfileTab(circles = profileState.circles, onCircleClick = onCircleClick)
-                            2 -> AboutProfileTab(user = user)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Helpers / Tabs contents
-// ──────────────────────────────────────────────────────────────────────────────
-
-@Composable
-fun StatItem(count: Int, label: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(text = count.toString(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.width(4.dp))
-        Text(text = label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.ccColors.marginGray)
-    }
-}
-
-@Composable
-fun PapersProfileTab(
-    papers: List<Paper>,
-    onPaperClick: (String) -> Unit
-) {
-    if (papers.isEmpty()) {
-        CcEmptyState(
-            emoji = "📄",
-            title = "No publications",
-            subtitle = "Publish a paper draft using the central FAB to populate your portfolio."
-        )
-    } else {
-        LazyColumn(
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            items(papers) { paper ->
-                CcCard(modifier = Modifier.fillMaxWidth().clickable { onPaperClick(paper.id) }) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(text = paper.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Text(text = "${paper.journal} • ${paper.year}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.ccColors.marginGray)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(text = "${paper.citationCount} citations", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = CcColors.CircleBlue)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun CirclesProfileTab(
-    circles: List<Circle>,
-    onCircleClick: (String) -> Unit
-) {
-    if (circles.isEmpty()) {
-        CcEmptyState(
-            emoji = "🏰",
-            title = "No circles",
-            subtitle = "You haven't joined any discussion circles yet."
-        )
-    } else {
-        LazyColumn(
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            items(circles) { circle ->
-                CcCard(modifier = Modifier.fillMaxWidth().clickable { onCircleClick(circle.id) }) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(text = circle.iconEmoji, fontSize = 28.sp)
-                        Spacer(modifier = Modifier.width(16.dp))
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 24.dp)
+                ) {
+                    // 1. Cover Gradient and Avatar details block
+                    item {
                         Column {
-                            Text(text = circle.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                            Text(text = "${circle.memberCount} members", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.ccColors.marginGray)
+                            // Header cover gradient
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(130.dp)
+                                    .background(
+                                        brush = Brush.horizontalGradient(
+                                            colors = listOf(CcColors.InkNavy, CcColors.CircleBlue)
+                                        )
+                                    )
+                            )
+
+                            // Avatar overlay details
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 24.dp)
+                                    .layout { measurable, constraints ->
+                                        val placeable = measurable.measure(constraints)
+                                        val overlap = 40.dp.roundToPx()
+                                        layout(placeable.width, (placeable.height - overlap).coerceAtLeast(0)) {
+                                            placeable.placeRelative(0, -overlap)
+                                        }
+                                    }
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.Bottom,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    CcAvatar(user = user, size = 80.dp)
+
+                                    Spacer(modifier = Modifier.width(16.dp))
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = user.name,
+                                            fontFamily = FrauncesFamily,
+                                            fontSize = 24.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onBackground
+                                        )
+
+                                        Text(
+                                            text = "${user.role.displayName()} • ${user.institution}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.ccColors.marginGray
+                                        )
+                                    }
+
+                                    CcSecondaryButton(
+                                        text = "Edit",
+                                        onClick = onEditProfile,
+                                        modifier = Modifier.height(36.dp)
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                // ORCID details stubs
+                                if (user.orcidId.isNotEmpty()) {
+                                    Text(
+                                        text = "ORCID: ${user.orcidId}",
+                                        fontSize = 12.sp,
+                                        fontFamily = JetBrainsMonoFamily,
+                                        color = CcColors.SeafoamTeal,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                // Stats count columns row (Stacked Metrics with dividers and background)
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                                        .padding(vertical = 12.dp),
+                                    horizontalArrangement = Arrangement.SpaceEvenly,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    StatItem(count = user.followerCount, label = "Followers", modifier = Modifier.weight(1f))
+                                    VerticalDivider(modifier = Modifier.height(24.dp), color = MaterialTheme.ccColors.divider)
+                                    StatItem(count = user.followingCount, label = "Following", modifier = Modifier.weight(1f))
+                                    VerticalDivider(modifier = Modifier.height(24.dp), color = MaterialTheme.ccColors.divider)
+                                    HighlighterSweep(modifier = Modifier.weight(1f)) {
+                                        StatItem(count = user.citationCount, label = "Citations", modifier = Modifier.fillMaxWidth())
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                // Bio
+                                Text(text = user.bio, style = MaterialTheme.typography.bodyMedium)
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                // Field Interest chips stubs row
+                                if (user.interests.isNotEmpty()) {
+                                    LazyRow(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        items(user.interests) { interest ->
+                                            CcChip(label = interest, selected = false, onClick = {})
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 2. Tab selector
+                    item {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        CcTabRow(
+                            tabs = listOf("Papers", "Circles", "About"),
+                            selectedIndex = selectedTab,
+                            onTabSelected = { selectedTab = it },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
+                    // 3. Tab items switcher
+                    when (selectedTab) {
+                        0 -> {
+                            if (profileState.papers.isEmpty()) {
+                                item {
+                                    CcEmptyState(
+                                        emoji = "📄",
+                                        title = "No publications",
+                                        subtitle = "Publish a paper draft using the central FAB to populate your portfolio."
+                                    )
+                                }
+                            } else {
+                                items(profileState.papers) { paper ->
+                                    Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                                        CcCard(modifier = Modifier.fillMaxWidth().clickable { onPaperClick(paper.id) }) {
+                                            Column(modifier = Modifier.padding(16.dp)) {
+                                                Text(text = paper.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                                Text(text = "${paper.journal} • ${paper.year}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.ccColors.marginGray)
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                                Text(text = "${paper.citationCount} citations", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = CcColors.CircleBlue)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        1 -> {
+                            if (profileState.circles.isEmpty()) {
+                                item {
+                                    CcEmptyState(
+                                        emoji = "🏰",
+                                        title = "No circles",
+                                        subtitle = "You haven't joined any discussion circles yet."
+                                    )
+                                }
+                            } else {
+                                items(profileState.circles) { circle ->
+                                    Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                                        CcCard(modifier = Modifier.fillMaxWidth().clickable { onCircleClick(circle.id) }) {
+                                            Row(
+                                                modifier = Modifier.padding(16.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(text = circle.iconEmoji, fontSize = 28.sp)
+                                                Spacer(modifier = Modifier.width(16.dp))
+                                                Column {
+                                                    Text(text = circle.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                                    Text(text = "${circle.memberCount} members", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.ccColors.marginGray)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        2 -> {
+                            item {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(24.dp)
+                                ) {
+                                    Text(text = "Research Interests", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(text = user.interests.joinToString { it }, style = MaterialTheme.typography.bodyMedium)
+
+                                    Spacer(modifier = Modifier.height(24.dp))
+
+                                    Text(text = "Affiliation Details", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(text = "${user.institution}\nGlobal Academic Community Network", style = MaterialTheme.typography.bodyMedium)
+                                }
+                            }
                         }
                     }
                 }
@@ -302,21 +305,27 @@ fun CirclesProfileTab(
     }
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ──────────────────────────────────────────────────────────────────────────────
+
 @Composable
-fun AboutProfileTab(user: User) {
+fun StatItem(count: Int, label: String, modifier: Modifier = Modifier) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp)
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
     ) {
-        Text(text = "Research Interests", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(text = user.interests.joinToString { it }, style = MaterialTheme.typography.bodyMedium)
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text(text = "Affiliation Details", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(text = "${user.institution}\nGlobal Academic Community Network", style = MaterialTheme.typography.bodyMedium)
+        Text(
+            text = count.toString(),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.ccColors.marginGray
+        )
     }
 }

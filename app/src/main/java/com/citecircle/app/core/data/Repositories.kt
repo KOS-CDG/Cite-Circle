@@ -6,6 +6,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import com.citecircle.app.core.network.FireworksApi
+import com.citecircle.app.core.network.ChatCompletionRequest
+import com.citecircle.app.core.network.ChatMessage
 import javax.inject.Inject
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -308,7 +314,9 @@ class FakeCommentRepository @Inject constructor() : CommentRepository {
     }
 }
 
-class FakeMessageRepository @Inject constructor() : MessageRepository {
+class FakeMessageRepository @Inject constructor(
+    private val api: FireworksApi
+) : MessageRepository {
     private val _conversations = MutableStateFlow(FakeDataSource.conversations)
     private val _messagesByConv = mutableMapOf<String, MutableStateFlow<List<Message>>>()
 
@@ -339,7 +347,66 @@ class FakeMessageRepository @Inject constructor() : MessageRepository {
             current[idx] = current[idx].copy(lastMessage = msg, unreadCount = 0)
             _conversations.value = current
         }
+
+        if (convId == "conv_ai") {
+            CoroutineScope(Dispatchers.IO).launch {
+                getAiReply(flow)
+            }
+        }
+
         return msg
+    }
+
+    private suspend fun getAiReply(flow: MutableStateFlow<List<Message>>) {
+        try {
+            val modelId = "accounts/fireworks/models/llama-v3p1-70b-instruct"
+            val systemPrompt = """
+                You are CiteCircle AI Copilot, a helpful and highly knowledgeable assistant for academic researchers and students.
+                Your task is to answer questions about research, literature reviews, methodology, statistics, paper writing, and academic publishing.
+                Be clear, professional, rigorous, and encourage open science and proper citation guidelines.
+            """.trimIndent()
+
+            val history = flow.value.takeLast(10).map { msg ->
+                ChatMessage(
+                    role = if (msg.senderId == FakeDataSource.currentUser.id) "user" else "assistant",
+                    content = msg.content
+                )
+            }
+
+            val request = ChatCompletionRequest(
+                model = modelId,
+                messages = listOf(ChatMessage(role = "system", content = systemPrompt)) + history,
+                temperature = 0.7
+            )
+
+            val response = api.chatCompletions(request)
+            val replyText = response.choices.firstOrNull()?.message?.content
+                ?: "I apologize, but I couldn't formulate a reply. Please try again."
+
+            val replyMsg = Message(
+                id = "msg_ai_${System.currentTimeMillis()}",
+                senderId = "ai_copilot",
+                content = replyText,
+                timestamp = System.currentTimeMillis()
+            )
+
+            flow.value = flow.value + replyMsg
+
+            val current = _conversations.value.toMutableList()
+            val idx = current.indexOfFirst { it.id == "conv_ai" }
+            if (idx >= 0) {
+                current[idx] = current[idx].copy(lastMessage = replyMsg, unreadCount = 0)
+                _conversations.value = current
+            }
+        } catch (e: Exception) {
+            val errorMsg = Message(
+                id = "msg_ai_err_${System.currentTimeMillis()}",
+                senderId = "ai_copilot",
+                content = "Sorry, I had trouble connecting to the network: ${e.localizedMessage ?: "Unknown error"}. Please check your connection.",
+                timestamp = System.currentTimeMillis()
+            )
+            flow.value = flow.value + errorMsg
+        }
     }
 
     override suspend fun searchUsers(query: String): List<User> {

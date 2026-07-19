@@ -4,8 +4,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,6 +30,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
 
 // ──────────────────────────────────────────────────────────────────────────────
 // EditProfileViewModel
@@ -94,6 +103,15 @@ fun EditProfileScreen(
                 var bio by remember { mutableStateOf(user.bio) }
                 var orcid by remember { mutableStateOf(user.orcidId) }
                 var fieldOfStudy by remember { mutableStateOf(user.fieldOfStudy) }
+                var avatarUrl by remember { mutableStateOf(user.avatarUrl) }
+
+                val pickMediaLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.PickVisualMedia()
+                ) { uri ->
+                    if (uri != null) {
+                        avatarUrl = uri.toString()
+                    }
+                }
 
                 Column(
                     modifier = Modifier
@@ -101,7 +119,36 @@ fun EditProfileScreen(
                         .verticalScroll(scrollState)
                         .padding(24.dp)
                 ) {
-                    CcAvatar(user = user, size = 72.dp, modifier = Modifier.align(Alignment.CenterHorizontally))
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterHorizontally)
+                            .clickable {
+                                pickMediaLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            }
+                    ) {
+                        CcAvatar(
+                            user = user.copy(avatarUrl = avatarUrl),
+                            size = 80.dp,
+                            showRing = true
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .align(Alignment.BottomEnd)
+                                .background(MaterialTheme.colorScheme.primary, CircleShape)
+                                .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.CameraAlt,
+                                contentDescription = "Change profile photo",
+                                tint = Color.White,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(24.dp))
 
@@ -163,7 +210,8 @@ fun EditProfileScreen(
                                 institution = institution,
                                 bio = bio,
                                 orcidId = orcid,
-                                fieldOfStudy = fieldOfStudy
+                                fieldOfStudy = fieldOfStudy,
+                                avatarUrl = avatarUrl
                             )
                             viewModel.saveProfile(updated, onBack)
                         },
