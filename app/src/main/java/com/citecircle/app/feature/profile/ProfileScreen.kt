@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
@@ -128,39 +129,30 @@ fun ProfileScreen(
                                         }
                                     }
                             ) {
+                                // 1. Top row: Avatar on left, Action buttons (Edit Profile & Settings) on right
                                 Row(
-                                    verticalAlignment = Alignment.Bottom,
-                                    modifier = Modifier.fillMaxWidth()
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.Bottom
                                 ) {
                                     CcAvatar(user = user, size = 80.dp)
 
-                                    Spacer(modifier = Modifier.width(16.dp))
-
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = user.name,
-                                            fontFamily = FrauncesFamily,
-                                            fontSize = 24.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onBackground
-                                        )
-
-                                        Text(
-                                            text = "${user.role.displayName()} • ${user.institution}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.ccColors.marginGray
-                                        )
-                                    }
-
-                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(bottom = 4.dp)
+                                    ) {
                                         CcSecondaryButton(
-                                            text = "Edit",
+                                            text = "Edit Profile",
                                             onClick = onEditProfile,
                                             modifier = Modifier.height(36.dp)
                                         )
                                         IconButton(
                                             onClick = onSettingsClick,
-                                            modifier = Modifier.size(36.dp)
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                                         ) {
                                             Icon(
                                                 Icons.Outlined.Settings,
@@ -169,6 +161,27 @@ fun ProfileScreen(
                                             )
                                         }
                                     }
+                                }
+
+                                Spacer(modifier = Modifier.height(14.dp))
+
+                                // 2. Name & Role information block
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Text(
+                                        text = user.name,
+                                        fontFamily = FrauncesFamily,
+                                        fontSize = 24.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onBackground
+                                    )
+
+                                    Spacer(modifier = Modifier.height(2.dp))
+
+                                    Text(
+                                        text = "${user.role.displayName()} • ${user.institution}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.ccColors.marginGray
+                                    )
                                 }
 
                                 Spacer(modifier = Modifier.height(12.dp))
