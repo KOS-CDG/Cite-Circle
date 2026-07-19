@@ -39,6 +39,7 @@ import com.citecircle.app.core.data.UserRepository
 import com.citecircle.app.core.designsystem.*
 import com.citecircle.app.core.model.Message
 import com.citecircle.app.core.model.User
+import com.citecircle.app.core.model.UserRole
 import com.citecircle.app.feature.feed.PaperMiniCard
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -153,6 +154,15 @@ fun FormattedChatMessageText(
 // ChatViewModel
 // ──────────────────────────────────────────────────────────────────────────────
 
+private val AI_COPILOT_USER = User(
+    id = "ai_copilot",
+    name = "CiteCircle AI Copilot",
+    avatarUrl = "https://api.dicebear.com/8.x/bottts/svg?seed=CiteCircleAI",
+    role = UserRole.RESEARCHER,
+    institution = "CiteCircle AI Core",
+    bio = "AI Academic Assistant"
+)
+
 @HiltViewModel
 class ChatViewModel @Inject constructor(
     private val messageRepository: MessageRepository,
@@ -162,6 +172,7 @@ class ChatViewModel @Inject constructor(
     private val _conversationId = MutableStateFlow("")
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
     private val _recipient = MutableStateFlow<User?>(null)
+    private var messageJob: kotlinx.coroutines.Job? = null
 
     val state: StateFlow<ChatScreenState> = combine(_messages, _recipient) { messages, recipient ->
         if (recipient == null) ChatScreenState.Loading
@@ -170,24 +181,54 @@ class ChatViewModel @Inject constructor(
 
     fun loadConversation(convId: String) {
         _conversationId.value = convId
-        viewModelScope.launch {
+
+        // For the AI conversation, set the recipient immediately without waiting for
+        // getConversations() which does not populate participants for conv_ai.
+        if (convId == "conv_ai") {
+            _recipient.value = AI_COPILOT_USER
+        }
+
+        // Cancel any previous message collection job before launching a new one
+        messageJob?.cancel()
+        messageJob = viewModelScope.launch {
             messageRepository.getMessagesForConversation(convId).collect {
                 _messages.value = it
             }
         }
-        viewModelScope.launch {
-            messageRepository.getConversations().collect { convs ->
-                val conv = convs.find { it.id == convId }
-                val recUser = conv?.participants?.firstOrNull { it.id != "u0" }
-                _recipient.value = recUser
+
+        // Only resolve the recipient from conversations for non-AI chats
+        if (convId != "conv_ai") {
+            viewModelScope.launch {
+                messageRepository.getConversations().collect { convs ->
+                    val conv = convs.find { it.id == convId }
+                    val recUser = conv?.participants?.firstOrNull { it.id != "u0" }
+                    if (recUser != null) _recipient.value = recUser
+                }
             }
         }
     }
 
     fun sendMessage(content: String) {
+        val convId = _conversationId.value
+        // Optimistically add the user's message to state immediately so the
+        // typing indicator appears without waiting for the network round-trip.
+        val optimisticMsg = Message(
+            id = "msg_optimistic_${System.currentTimeMillis()}",
+            senderId = "me",  // placeholder; real id set by server
+            content = content,
+            timestamp = System.currentTimeMillis()
+        )
+        _messages.value = _messages.value + optimisticMsg
+
         viewModelScope.launch {
-            messageRepository.sendMessage(_conversationId.value, content)
-            loadConversation(_conversationId.value)
+            messageRepository.sendMessage(convId, content)
+            // After the backend responds (including AI reply), refresh messages
+            messageJob?.cancel()
+            messageJob = viewModelScope.launch {
+                messageRepository.getMessagesForConversation(convId).collect {
+                    _messages.value = it
+                }
+            }
         }
     }
 }

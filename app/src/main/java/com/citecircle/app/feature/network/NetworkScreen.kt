@@ -58,6 +58,21 @@ class NetworkViewModel @Inject constructor(
     private val _actionStates = MutableStateFlow<Map<String, String>>(emptyMap())
     val actionStates = _actionStates.asStateFlow()
 
+    init {
+        // Restore pending connection states from the repository (which reads from DataStore)
+        viewModelScope.launch {
+            userRepository.getSuggestedConnections().collect { users ->
+                val pending = users
+                    .filter { it.connectionPending }
+                    .associate { it.id to "Pending" }
+                // Merge with any in-session states (in-session wins)
+                val current = _actionStates.value.toMutableMap()
+                pending.forEach { (id, state) -> current.putIfAbsent(id, state) }
+                _actionStates.value = current
+            }
+        }
+    }
+
     fun acceptRequest(userId: String) {
         viewModelScope.launch {
             userRepository.acceptConnection(userId)

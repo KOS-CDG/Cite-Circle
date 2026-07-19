@@ -1,5 +1,8 @@
 package com.citecircle.app.feature.publish
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -295,6 +298,38 @@ fun Step2Details(
     var title by remember { mutableStateOf(draft.title) }
     var abstract by remember { mutableStateOf(draft.abstract) }
     var pdfName by remember { mutableStateOf(draft.pdfFileName) }
+    var pdfSizeLabel by remember { mutableStateOf<String?>(null) }
+
+    val context = LocalContext.current
+    val pdfPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val projection = arrayOf(
+                android.provider.OpenableColumns.DISPLAY_NAME,
+                android.provider.OpenableColumns.SIZE
+            )
+            val cursor = context.contentResolver.query(uri, projection, null, null, null)
+            var displayName = uri.lastPathSegment ?: "document.pdf"
+            var sizeKb: Long? = null
+            cursor?.use { c ->
+                if (c.moveToFirst()) {
+                    val nameIndex = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    val sizeIndex = c.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                    if (nameIndex >= 0) displayName = c.getString(nameIndex)
+                    if (sizeIndex >= 0) sizeKb = c.getLong(sizeIndex) / 1024L
+                }
+            }
+            val sizeLabel = when {
+                sizeKb == null  -> ""
+                sizeKb!! < 1024 -> "${sizeKb} KB"
+                else            -> "${ "%.1f".format(sizeKb!! / 1024.0) } MB"
+            }
+            pdfName = displayName
+            pdfSizeLabel = sizeLabel
+            onDraftChange(draft.copy(title = title, abstract = abstract, pdfFileName = displayName, pdfFileSizeKb = sizeKb, pdfUri = uri))
+        }
+    }
 
     val scrollState = rememberScrollState()
 
@@ -357,11 +392,14 @@ fun Step2Details(
                 Spacer(modifier = Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = pdfName!!, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                    Text(text = "2.4 MB", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.ccColors.marginGray)
+                    if (!pdfSizeLabel.isNullOrBlank()) {
+                        Text(text = pdfSizeLabel!!, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.ccColors.marginGray)
+                    }
                 }
                 IconButton(onClick = {
                     pdfName = null
-                    onDraftChange(draft.copy(title = title, abstract = abstract, pdfFileName = null))
+                    pdfSizeLabel = null
+                    onDraftChange(draft.copy(title = title, abstract = abstract, pdfFileName = null, pdfFileSizeKb = null, pdfUri = null))
                 }) {
                     Icon(Icons.Filled.Close, contentDescription = "Remove PDF", tint = CcColors.CoralPop)
                 }
@@ -369,10 +407,7 @@ fun Step2Details(
         } else {
             CcSecondaryButton(
                 text = "Upload manuscript PDF",
-                onClick = {
-                    pdfName = "Situated_Cognition_Paper_Draft.pdf"
-                    onDraftChange(draft.copy(title = title, abstract = abstract, pdfFileName = pdfName))
-                },
+                onClick = { pdfPickerLauncher.launch("application/pdf") },
                 icon = Icons.Filled.Add,
                 modifier = Modifier.fillMaxWidth()
             )

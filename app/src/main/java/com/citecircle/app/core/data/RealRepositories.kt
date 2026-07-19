@@ -190,6 +190,7 @@ class RealUserRepository @Inject constructor(
     private val json: Json,
 ) : UserRepository {
     private val _currentUser = MutableStateFlow(FakeDataSource.currentUser)
+    private val _pendingConnectionIds = MutableStateFlow(mutableSetOf<String>())
 
     init {
         CoroutineScope(Dispatchers.IO).launch {
@@ -198,6 +199,13 @@ class RealUserRepository @Inject constructor(
                 runCatching {
                     val user = json.decodeFromString(User.serializer(), savedUserJson)
                     _currentUser.value = user
+                }
+            }
+            // Restore persisted pending connection IDs
+            tokenManager.getPendingConnectionsJson()?.let { jsonStr ->
+                runCatching {
+                    val set = json.decodeFromString(SetSerializer(String.serializer()), jsonStr)
+                    _pendingConnectionIds.value = set.toMutableSet()
                 }
             }
         }
@@ -227,7 +235,9 @@ class RealUserRepository @Inject constructor(
 
     override fun getSuggestedConnections(): Flow<List<User>> = flow {
         try {
-            emit(api.getSuggestedUsers().map { it.toDomain() })
+            // Mark users whose connection is pending so the UI can show correct state
+            val pending = _pendingConnectionIds.value
+            emit(api.getSuggestedUsers().map { it.toDomain().copy(connectionPending = pending.contains(it.id)) })
         } catch (e: Exception) {
             emit(emptyList())
         }
@@ -247,13 +257,23 @@ class RealUserRepository @Inject constructor(
     override suspend fun connectUser(userId: String): Boolean {
         return try {
             api.requestConnection(userId)
+            // Persist pending state so it survives app restart
+            val current = _pendingConnectionIds.value.toMutableSet()
+            current.add(userId)
+            _pendingConnectionIds.value = current
+            runCatching {
+                tokenManager.savePendingConnectionsJson(
+                    json.encodeToString(SetSerializer(String.serializer()), current)
+                )
+            }
             true
         } catch (e: Exception) { false }
     }
 
     override suspend fun acceptConnection(userId: String): Boolean {
+        // Server doesn't yet have a dedicated accept endpoint; best-effort follow
         return try {
-            api.requestConnection(userId)
+            api.toggleFollow(userId)
             true
         } catch (e: Exception) { false }
     }
@@ -264,6 +284,20 @@ class RealUserRepository @Inject constructor(
         _currentUser.value = user
         runCatching {
             tokenManager.saveUserJson(json.encodeToString(User.serializer(), user))
+        }
+        // Also push to server (best-effort — fails gracefully on demo tokens)
+        runCatching {
+            api.updateMe(
+                com.citecircle.app.core.network.UserUpdateDto(
+                    name = user.name,
+                    avatarUrl = user.avatarUrl.takeIf { it.isNotBlank() },
+                    institution = user.institution.takeIf { it.isNotBlank() },
+                    fieldOfStudy = user.fieldOfStudy.takeIf { it.isNotBlank() },
+                    bio = user.bio.takeIf { it.isNotBlank() },
+                    orcidId = user.orcidId.takeIf { it.isNotBlank() },
+                    interests = user.interests.takeIf { it.isNotEmpty() },
+                )
+            )
         }
         return true
     }
@@ -462,7 +496,19 @@ class RealPaperRepository @Inject constructor(
     }
 
     override fun getSavedPapers(): Flow<List<Paper>> = flow {
-        emit(emptyList())
+        // Fetch all papers from API and filter to only the ones the user has saved locally
+        val savedIds = _savedPaperIds.value
+        if (savedIds.isEmpty()) {
+            emit(emptyList())
+            return@flow
+        }
+        try {
+            val allPapers = api.getPapers(limit = 200).map { it.toDomain() }
+            emit(allPapers.filter { savedIds.contains(it.id) })
+        } catch (e: Exception) {
+            // Fallback: return fake papers that match saved IDs (offline mode)
+            emit(FakeDataSource.papers.filter { savedIds.contains(it.id) })
+        }
     }
 
     override fun getShelves(): Flow<List<Shelf>> = _shelves.asStateFlow()
@@ -670,17 +716,23 @@ class RealMessageRepository @Inject constructor(
 
         try {
             val convDtos = api.getConversations()
-            val conversations = convDtos.map { dto ->
-                val msgs = try { api.getMessages(dto.id) } catch (_: Exception) { emptyList() }
-                Conversation(
-                    id = dto.id,
-                    participants = emptyList(), // enriched by UI if needed
-                    lastMessage = msgs.lastOrNull()?.toDomain(),
-                    unreadCount = msgs.count { !it.isRead },
-                )
-            }
-            emit(conversations)
-        } catch (e: Exception) { emit(FakeDataSource.conversations) }
+            val realConversations = convDtos
+                .filter { it.id != "conv_ai" } // avoid duplicating the AI conv
+                .map { dto ->
+                    val msgs = try { api.getMessages(dto.id) } catch (_: Exception) { emptyList() }
+                    Conversation(
+                        id = dto.id,
+                        participants = emptyList(),
+                        lastMessage = msgs.lastOrNull()?.toDomain(),
+                        unreadCount = msgs.count { !it.isRead },
+                    )
+                }
+            // Always prepend the AI conversation at the top
+            emit(listOf(aiConv) + realConversations)
+        } catch (e: Exception) {
+            // Prepend AI conv to fake data as well
+            emit(listOf(aiConv) + FakeDataSource.conversations.filter { it.id != "conv_ai" })
+        }
     }
 
     override fun getMessagesForConversation(convId: String): Flow<List<Message>> = flow {

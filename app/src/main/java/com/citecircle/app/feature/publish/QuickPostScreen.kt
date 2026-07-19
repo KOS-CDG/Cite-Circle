@@ -1,6 +1,9 @@
 package com.citecircle.app.feature.publish
 
+import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -211,6 +214,37 @@ fun QuickPostScreen(
 
     var showPaperPicker by remember { mutableStateOf(false) }
     var showCirclePicker by remember { mutableStateOf(false) }
+    var attachedPdfName by remember { mutableStateOf<String?>(null) }
+    var attachedPdfSize by remember { mutableStateOf<String?>(null) }
+
+    // Real device PDF picker
+    val pdfPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val projection = arrayOf(
+                android.provider.OpenableColumns.DISPLAY_NAME,
+                android.provider.OpenableColumns.SIZE
+            )
+            val cursor = context.contentResolver.query(uri, projection, null, null, null)
+            var displayName = uri.lastPathSegment ?: "document.pdf"
+            var sizeKb: Long? = null
+            cursor?.use { c ->
+                if (c.moveToFirst()) {
+                    val nameIndex = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    val sizeIndex = c.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                    if (nameIndex >= 0) displayName = c.getString(nameIndex)
+                    if (sizeIndex >= 0) sizeKb = c.getLong(sizeIndex) / 1024L
+                }
+            }
+            attachedPdfName = displayName
+            attachedPdfSize = when {
+                sizeKb == null  -> ""
+                sizeKb!! < 1024 -> "${sizeKb} KB"
+                else            -> "${ "%.1f".format(sizeKb!! / 1024.0) } MB"
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
@@ -355,7 +389,49 @@ fun QuickPostScreen(
                 )
             }
 
-            // ── Cited paper preview ──
+            // ── Attached PDF preview ──
+            attachedPdfName?.let { name ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Filled.Description,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = name,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (!attachedPdfSize.isNullOrBlank()) {
+                            Text(
+                                text = attachedPdfSize!!,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.ccColors.marginGray
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = { attachedPdfName = null; attachedPdfSize = null },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(Icons.Filled.Close, contentDescription = "Remove PDF", tint = CcColors.CoralPop, modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
+
             uiState.citedPaper?.let { paper ->
                 CitedPaperCard(
                     paper = paper,
@@ -391,15 +467,14 @@ fun QuickPostScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(
-                    onClick = {
-                        Toast.makeText(context, "PDF attachments coming soon", Toast.LENGTH_SHORT).show()
-                    },
+                    onClick = { pdfPickerLauncher.launch("application/pdf") },
                     modifier = Modifier.semantics { contentDescription = "Attach PDF" }
                 ) {
                     Icon(
                         Icons.Outlined.AttachFile,
                         contentDescription = null,
-                        tint = MaterialTheme.ccColors.marginGray
+                        tint = if (attachedPdfName != null) MaterialTheme.colorScheme.primary
+                               else MaterialTheme.ccColors.marginGray
                     )
                 }
                 IconButton(

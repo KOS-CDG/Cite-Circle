@@ -1,5 +1,8 @@
 package com.citecircle.app.feature.circles
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -16,7 +19,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.citecircle.app.core.data.FakeDataSource
 import com.citecircle.app.core.designsystem.*
 import com.citecircle.app.core.model.Circle
 import com.citecircle.app.core.model.Post
@@ -42,7 +44,7 @@ class ComposerViewModel @Inject constructor(
         viewModelScope.launch {
             val newPost = Post(
                 id = "post_${System.currentTimeMillis()}",
-                author = FakeDataSource.currentUser,
+                author = com.citecircle.app.core.data.FakeDataSource.currentUser,
                 content = content,
                 type = PostType.DISCUSSION,
                 flair = flair,
@@ -75,10 +77,41 @@ fun PostComposerSheet(
     onPostCreated: () -> Unit,
     viewModel: ComposerViewModel = hiltViewModel()
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     var content by remember { mutableStateOf("") }
     var selectedFlair by remember { mutableStateOf(PostFlair.DISCUSSION) }
     var selectedPdfName by remember { mutableStateOf<String?>(null) }
     var selectedPdfSize by remember { mutableStateOf<String?>(null) }
+
+    // Real device PDF picker
+    val pdfPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val projection = arrayOf(
+                android.provider.OpenableColumns.DISPLAY_NAME,
+                android.provider.OpenableColumns.SIZE
+            )
+            val cursor = context.contentResolver.query(uri, projection, null, null, null)
+            var displayName = uri.lastPathSegment ?: "document.pdf"
+            var sizeKb: Long? = null
+            cursor?.use { c ->
+                if (c.moveToFirst()) {
+                    val nameIndex = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    val sizeIndex = c.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                    if (nameIndex >= 0) displayName = c.getString(nameIndex)
+                    if (sizeIndex >= 0) sizeKb = c.getLong(sizeIndex) / 1024L
+                }
+            }
+            val sizeLabel = when {
+                sizeKb == null  -> ""
+                sizeKb!! < 1024 -> "${sizeKb} KB"
+                else            -> "${"%.1f".format(sizeKb!! / 1024.0)} MB"
+            }
+            selectedPdfName = displayName
+            selectedPdfSize = sizeLabel
+        }
+    }
 
     val scrollState = rememberScrollState()
 
@@ -184,11 +217,7 @@ fun PostComposerSheet(
             } else {
                 CcSecondaryButton(
                     text = "Attach Manuscript PDF (Optional)",
-                    onClick = {
-                        // Mock upload selection
-                        selectedPdfName = "situated_cognition_draft.pdf"
-                        selectedPdfSize = "2.4 MB"
-                    },
+                    onClick = { pdfPickerLauncher.launch("application/pdf") },
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(24.dp))

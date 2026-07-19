@@ -191,8 +191,8 @@ object NetworkModule {
 
     @Provides @Singleton @FireworksClient
     fun provideFireworksOkHttpClient(): OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(90, TimeUnit.SECONDS)
         .addInterceptor(RateLimitInterceptor(requestsPerMinute = 60, minIntervalMs = 50L))
         .addInterceptor { chain ->
             chain.proceed(

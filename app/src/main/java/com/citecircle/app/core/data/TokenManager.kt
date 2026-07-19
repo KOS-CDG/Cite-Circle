@@ -29,6 +29,7 @@ class TokenManager @Inject constructor(
         private val KEY_SAVED_PAPERS_JSON = stringPreferencesKey("saved_papers_json")
         private val KEY_SHELVES_JSON = stringPreferencesKey("shelves_json")
         private val KEY_JOINED_CIRCLES_JSON = stringPreferencesKey("joined_circles_json")
+        private val KEY_PENDING_CONNECTIONS_JSON = stringPreferencesKey("pending_connections_json")
     }
 
     /** Persist tokens after login/signup. */
@@ -96,4 +97,11 @@ class TokenManager @Inject constructor(
 
     suspend fun getJoinedCirclesJson(): String? =
         context.tokenDataStore.data.map { it[KEY_JOINED_CIRCLES_JSON] }.first()
+
+    suspend fun savePendingConnectionsJson(json: String) {
+        context.tokenDataStore.edit { it[KEY_PENDING_CONNECTIONS_JSON] = json }
+    }
+
+    suspend fun getPendingConnectionsJson(): String? =
+        context.tokenDataStore.data.map { it[KEY_PENDING_CONNECTIONS_JSON] }.first()
 }

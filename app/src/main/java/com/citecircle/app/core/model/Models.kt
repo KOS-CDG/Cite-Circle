@@ -69,7 +69,7 @@ data class Paper(
     val id: String,
     val title: String,
     val authors: List<User> = emptyList(),
-    val abstract: String,
+    val abstract: String = "",
     val fieldTags: List<String> = emptyList(),
     val citationCount: Int = 0,
     val year: Int = 2024,
@@ -194,7 +194,8 @@ data class PaperDraft(
     val abstract: String = "",
     val fieldTags: List<String> = emptyList(),
     val pdfFileName: String? = null,
-    val pdfFileSizeKb: Long? = null
+    val pdfFileSizeKb: Long? = null,
+    val pdfUri: android.net.Uri? = null
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
