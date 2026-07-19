@@ -127,8 +127,9 @@ fun CiteCircleNavHost(
         ) {
             // ── Onboarding ──
             composable<SplashRoute> {
-                SplashScreen(onSplashComplete = {
-                    navController.navigate(OnboardingRoute) {
+                SplashScreen(onSplashComplete = { isLoggedIn ->
+                    val target = if (isLoggedIn) HomeRoute else OnboardingRoute
+                    navController.navigate(target) {
                         popUpTo(SplashRoute::class) { inclusive = true }
                     }
                 })

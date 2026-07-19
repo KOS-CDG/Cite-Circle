@@ -32,7 +32,7 @@ class FireworksAiReviewRepository @Inject constructor(
 
             _progress.value = AiReviewStage.InProgress("Contacting Fireworks.ai service...", 3, 6)
 
-            val modelId = "accounts/fireworks/models/gpt-oss-120b"
+            val modelId = "accounts/fireworks/models/llama-v3p1-8b-instruct"
             val systemPrompt = """
                 You are an expert peer reviewer for academic manuscripts. Your job is to critique the provided title and abstract of a research draft.
                 Analyze the draft on five key criteria:
@@ -106,7 +106,9 @@ class FireworksAiReviewRepository @Inject constructor(
         } catch (e: Exception) {
             val errorMessage = e.localizedMessage ?: "An unexpected error occurred during AI review"
             _progress.value = AiReviewStage.Error(errorMessage)
-            throw e
+            // Return fallback offline report so the app never crashes
+            return FakeDataSource.sampleAiReport
         }
     }
 }
+

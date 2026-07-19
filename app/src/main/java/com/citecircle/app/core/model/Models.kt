@@ -64,10 +64,11 @@ data class Post(
 // Paper
 // ──────────────────────────────────────────────────────────────────────────────
 
+@Serializable
 data class Paper(
     val id: String,
     val title: String,
-    val authors: List<User>,
+    val authors: List<User> = emptyList(),
     val abstract: String,
     val fieldTags: List<String> = emptyList(),
     val citationCount: Int = 0,
@@ -84,6 +85,7 @@ data class Paper(
 // Circle (Community)
 // ──────────────────────────────────────────────────────────────────────────────
 
+@Serializable
 data class Circle(
     val id: String,
     val name: String,
@@ -136,6 +138,7 @@ data class Notification(
 // Messaging
 // ──────────────────────────────────────────────────────────────────────────────
 
+@Serializable
 data class Message(
     val id: String,
     val senderId: String,
@@ -145,6 +148,7 @@ data class Message(
     val attachedPaper: Paper? = null
 )
 
+@Serializable
 data class Conversation(
     val id: String,
     val participants: List<User>,

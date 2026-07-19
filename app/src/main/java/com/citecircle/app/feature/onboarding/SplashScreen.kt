@@ -21,8 +21,24 @@ import com.citecircle.app.core.designsystem.CcColors
 import com.citecircle.app.core.designsystem.FrauncesFamily
 import kotlinx.coroutines.delay
 
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
+import com.citecircle.app.core.data.TokenManager
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
+
+@HiltViewModel
+class SplashViewModel @Inject constructor(
+    private val tokenManager: TokenManager
+) : ViewModel() {
+    suspend fun checkAuthState(): Boolean = tokenManager.isLoggedIn()
+}
+
 @Composable
-fun SplashScreen(onSplashComplete: () -> Unit) {
+fun SplashScreen(
+    onSplashComplete: (isLoggedIn: Boolean) -> Unit,
+    viewModel: SplashViewModel = hiltViewModel()
+) {
     val transition = rememberInfiniteTransition(label = "splash")
     val rotation by transition.animateFloat(
         initialValue = 0f,
@@ -42,8 +58,9 @@ fun SplashScreen(onSplashComplete: () -> Unit) {
             targetValue = 1f,
             animationSpec = tween(1200, easing = FastOutSlowInEasing)
         )
-        delay(800) // Keep visible
-        onSplashComplete()
+        val isLoggedIn = viewModel.checkAuthState()
+        delay(400) // Keep visible
+        onSplashComplete(isLoggedIn)
     }
 
     Box(

@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.citecircle.app.BuildConfig
+import com.citecircle.app.core.network.CiteCircleApi
 import com.citecircle.app.core.network.FireworksApi
 import dagger.Binds
 import dagger.Module
@@ -16,6 +17,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
@@ -26,7 +28,20 @@ import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import java.util.ArrayDeque
 import java.util.concurrent.TimeUnit
+import javax.inject.Qualifier
 import javax.inject.Singleton
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Named qualifiers to distinguish the two OkHttpClients
+// ──────────────────────────────────────────────────────────────────────────────
+
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class FireworksClient
+
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class CiteCircleClient
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Theme preference (DataStore)
@@ -53,41 +68,41 @@ class DataStoreThemeRepository(private val dataStore: DataStore<Preferences>) : 
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Hilt Module
+// Hilt Module — Repository bindings (Real implementations)
 // ──────────────────────────────────────────────────────────────────────────────
 
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class RepositoryModule {
     @Binds @Singleton
-    abstract fun bindPostRepository(impl: FakePostRepository): PostRepository
+    abstract fun bindPostRepository(impl: RealPostRepository): PostRepository
 
     @Binds @Singleton
-    abstract fun bindPaperRepository(impl: FakePaperRepository): PaperRepository
+    abstract fun bindPaperRepository(impl: RealPaperRepository): PaperRepository
 
     @Binds @Singleton
-    abstract fun bindCircleRepository(impl: FakeCircleRepository): CircleRepository
+    abstract fun bindCircleRepository(impl: RealCircleRepository): CircleRepository
 
     @Binds @Singleton
-    abstract fun bindUserRepository(impl: FakeUserRepository): UserRepository
+    abstract fun bindUserRepository(impl: RealUserRepository): UserRepository
 
     @Binds @Singleton
-    abstract fun bindCommentRepository(impl: FakeCommentRepository): CommentRepository
+    abstract fun bindCommentRepository(impl: RealCommentRepository): CommentRepository
 
     @Binds @Singleton
-    abstract fun bindMessageRepository(impl: FakeMessageRepository): MessageRepository
+    abstract fun bindMessageRepository(impl: RealMessageRepository): MessageRepository
 
     @Binds @Singleton
-    abstract fun bindNotificationRepository(impl: FakeNotificationRepository): NotificationRepository
+    abstract fun bindNotificationRepository(impl: RealNotificationRepository): NotificationRepository
 
     @Binds @Singleton
     abstract fun bindAiReviewRepository(impl: FireworksAiReviewRepository): AiReviewRepository
 
     @Binds @Singleton
-    abstract fun bindSearchRepository(impl: FakeSearchRepository): SearchRepository
+    abstract fun bindSearchRepository(impl: RealSearchRepository): SearchRepository
 
     @Binds @Singleton
-    abstract fun bindAuthRepository(impl: FakeAuthRepository): AuthRepository
+    abstract fun bindAuthRepository(impl: RealAuthRepository): AuthRepository
 }
 
 @Module
@@ -100,6 +115,10 @@ object DataModule {
     @Provides @Singleton
     fun provideThemeRepository(dataStore: DataStore<Preferences>): ThemeRepository =
         DataStoreThemeRepository(dataStore)
+
+    @Provides @Singleton
+    fun provideTokenManager(@ApplicationContext context: Context): TokenManager =
+        TokenManager(context)
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -154,7 +173,7 @@ class RateLimitInterceptor(
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Network Module (Fireworks.ai)
+// Network Module — Fireworks.ai (AI paper summaries)
 // ──────────────────────────────────────────────────────────────────────────────
 
 @Module
@@ -170,8 +189,8 @@ object NetworkModule {
         encodeDefaults = true
     }
 
-    @Provides @Singleton
-    fun provideOkHttpClient(): OkHttpClient = OkHttpClient.Builder()
+    @Provides @Singleton @FireworksClient
+    fun provideFireworksOkHttpClient(): OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(90, TimeUnit.SECONDS)
         .addInterceptor(RateLimitInterceptor(requestsPerMinute = 15, minIntervalMs = 2000L))
@@ -189,11 +208,49 @@ object NetworkModule {
         .build()
 
     @Provides @Singleton
-    fun provideFireworksApi(client: OkHttpClient, json: Json): FireworksApi =
+    fun provideFireworksApi(@FireworksClient client: OkHttpClient, json: Json): FireworksApi =
         Retrofit.Builder()
             .baseUrl(FIREWORKS_BASE_URL)
             .client(client)
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
             .create(FireworksApi::class.java)
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Network Module — Cite Circle Backend (Render)
+// ──────────────────────────────────────────────────────────────────────────────
+
+@Module
+@InstallIn(SingletonComponent::class)
+object CiteCircleNetworkModule {
+    private const val CITE_CIRCLE_BASE_URL = "https://cite-circle.onrender.com/"
+
+    @Provides @Singleton @CiteCircleClient
+    fun provideCiteCircleOkHttpClient(tokenManager: TokenManager): OkHttpClient =
+        OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .addInterceptor { chain ->
+                val token = runBlocking { tokenManager.getAccessToken() }
+                val builder = chain.request().newBuilder()
+                if (!token.isNullOrBlank()) {
+                    builder.addHeader("Authorization", "Bearer $token")
+                }
+                chain.proceed(builder.build())
+            }
+            .addInterceptor(HttpLoggingInterceptor().apply {
+                level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
+                else HttpLoggingInterceptor.Level.NONE
+            })
+            .build()
+
+    @Provides @Singleton
+    fun provideCiteCircleApi(@CiteCircleClient client: OkHttpClient, json: Json): CiteCircleApi =
+        Retrofit.Builder()
+            .baseUrl(CITE_CIRCLE_BASE_URL)
+            .client(client)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+            .create(CiteCircleApi::class.java)
 }

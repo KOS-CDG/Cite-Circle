@@ -17,3 +17,9 @@ local.properties
 classes/
 java.base.zip
 *.log
+
+# MCP server config (contains API keys)
+.mcp.json
+
+# Backend lives in its own git repo (cite-circle-backend)
+backend/
