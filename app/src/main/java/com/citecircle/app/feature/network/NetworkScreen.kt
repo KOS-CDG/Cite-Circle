@@ -14,6 +14,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -315,6 +317,7 @@ fun DiscoverCard(
     onConnect: (String) -> Unit
 ) {
     val state = actionStates[user.id]
+    val haptic = LocalHapticFeedback.current
 
     CcCard(
         modifier = Modifier
@@ -346,7 +349,12 @@ fun DiscoverCard(
             Spacer(modifier = Modifier.height(16.dp))
 
             Button(
-                onClick = { onConnect(user.id) },
+                onClick = {
+                    if (state != "Pending") {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    }
+                    onConnect(user.id)
+                },
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (state == "Pending") MaterialTheme.ccColors.marginGray else MaterialTheme.colorScheme.primary
                 ),

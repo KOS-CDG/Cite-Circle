@@ -40,7 +40,6 @@ import com.citecircle.app.core.designsystem.*
 import com.citecircle.app.core.model.Message
 import com.citecircle.app.core.model.User
 import com.citecircle.app.feature.feed.PaperMiniCard
-import com.citecircle.app.feature.feed.formatRelativeTime
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -472,11 +471,7 @@ fun MessageBubble(
 
             Spacer(modifier = Modifier.height(2.dp))
 
-            Text(
-                text = formatRelativeTime(message.timestamp),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.ccColors.marginGray
-            )
+            CcTimestamp(timestamp = message.timestamp)
         }
     }
 }

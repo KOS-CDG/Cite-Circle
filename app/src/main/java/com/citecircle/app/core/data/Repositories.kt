@@ -13,6 +13,7 @@ import com.citecircle.app.core.network.FireworksApi
 import com.citecircle.app.core.network.ChatCompletionRequest
 import com.citecircle.app.core.network.ChatMessage
 import javax.inject.Inject
+import kotlinx.coroutines.flow.combine
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Repository interfaces
@@ -33,6 +34,14 @@ interface PaperRepository {
     fun getPapersForUser(userId: String): Flow<List<Paper>>
     fun getPapersForCircle(circleId: String): Flow<List<Paper>>
     suspend fun publishPaper(draft: PaperDraft): Paper
+    suspend fun getPaperSummary(paperId: String, title: String, abstract: String): String
+    fun getSavedPapers(): Flow<List<Paper>>
+    fun getShelves(): Flow<List<Shelf>>
+    suspend fun createShelf(name: String, description: String): Boolean
+    suspend fun addPaperToShelf(paperId: String, shelfId: String): Boolean
+    suspend fun removePaperFromShelf(paperId: String, shelfId: String): Boolean
+    suspend fun toggleSavePaper(paperId: String): Boolean
+    fun isPaperSaved(paperId: String): Flow<Boolean>
 }
 
 interface CircleRepository {
@@ -153,8 +162,19 @@ class FakePostRepository @Inject constructor() : PostRepository {
     }
 }
 
-class FakePaperRepository @Inject constructor() : PaperRepository {
+class FakePaperRepository @Inject constructor(
+    private val api: FireworksApi
+) : PaperRepository {
     private val _papers = MutableStateFlow(FakeDataSource.papers)
+    private val _summaryCache = mutableMapOf<String, String>()
+    private val _savedPaperIds = MutableStateFlow(mutableSetOf("p1", "p2"))
+    private val _shelves = MutableStateFlow(
+        listOf(
+            Shelf("s1", "To Read", "Papers to read later", listOf("p1")),
+            Shelf("s2", "HCI & AI Research", "Interaction models for AI agents", listOf("p1")),
+            Shelf("s3", "Thesis References", "Key bibliography", listOf("p2"))
+        )
+    )
 
     override fun getAllPapers(): Flow<List<Paper>> = _papers.asStateFlow()
 
@@ -185,6 +205,132 @@ class FakePaperRepository @Inject constructor() : PaperRepository {
         current.add(0, paper)
         _papers.value = current
         return paper
+    }
+
+    override suspend fun getPaperSummary(paperId: String, title: String, abstract: String): String {
+        // Return cached result immediately
+        _summaryCache[paperId]?.let { return it }
+
+        return try {
+            val systemPrompt = """
+                You are a scientific summarization assistant. Given a research paper title and abstract,
+                produce exactly 3 concise bullet points summarizing the paper.
+                Format your response as exactly 3 lines, each starting with "• ".
+                Cover: (1) the key contribution or goal, (2) the main method or finding,
+                (3) the primary implication or takeaway.
+                Keep each bullet to 1–2 sentences. Return ONLY the 3 bullet points — no preamble, no extra text.
+            """.trimIndent()
+
+            val request = ChatCompletionRequest(
+                model = "accounts/fireworks/models/llama-v3p1-8b-instruct",
+                messages = listOf(
+                    ChatMessage(role = "system", content = systemPrompt),
+                    ChatMessage(role = "user", content = "Title: $title\n\nAbstract: $abstract")
+                ),
+                temperature = 0.3,
+                maxTokens = 300,
+                useJsonMode = false
+            )
+
+            val response = api.chatCompletions(request)
+            val summary = response.choices.firstOrNull()?.message?.content?.trim()
+                ?: generateFallbackSummary(abstract)
+
+            _summaryCache[paperId] = summary
+            summary
+        } catch (e: Exception) {
+            val fallback = generateFallbackSummary(abstract)
+            _summaryCache[paperId] = fallback
+            fallback
+        }
+    }
+
+    /** Extracts 3 key sentences from the abstract when the AI call is unavailable. */
+    private fun generateFallbackSummary(abstract: String): String {
+        val sentences = abstract.split(Regex("(?<=[.!?])\\s+")).filter { it.length > 40 }
+        val b1 = sentences.getOrElse(0) { abstract.take(140) }.take(150).trimEnd('.')
+        val b2 = sentences.getOrElse(1) { "" }.take(150).trimEnd('.')
+        val b3 = (sentences.lastOrNull() ?: "").take(150).trimEnd('.')
+        return buildString {
+            append("• $b1.\n")
+            if (b2.isNotEmpty() && b2 != b1) append("• $b2.\n")
+            if (b3.isNotEmpty() && b3 != b1 && b3 != b2) append("• $b3.")
+        }.trim()
+    }
+
+    override fun getSavedPapers(): Flow<List<Paper>> = combine(_papers, _savedPaperIds) { papers, savedIds ->
+        papers.filter { savedIds.contains(it.id) }
+    }
+
+    override fun getShelves(): Flow<List<Shelf>> = _shelves.asStateFlow()
+
+    override suspend fun createShelf(name: String, description: String): Boolean {
+        val current = _shelves.value.toMutableList()
+        val newShelf = Shelf(
+            id = "s${System.currentTimeMillis()}",
+            name = name,
+            description = description,
+            paperIds = emptyList()
+        )
+        current.add(newShelf)
+        _shelves.value = current
+        return true
+    }
+
+    override suspend fun addPaperToShelf(paperId: String, shelfId: String): Boolean {
+        val current = _shelves.value.toMutableList()
+        val idx = current.indexOfFirst { it.id == shelfId }
+        if (idx < 0) return false
+        val shelf = current[idx]
+        if (!shelf.paperIds.contains(paperId)) {
+            val updatedPaperIds = shelf.paperIds.toMutableList().apply { add(paperId) }
+            current[idx] = shelf.copy(paperIds = updatedPaperIds)
+            _shelves.value = current
+        }
+        // Also auto-save the paper if added to a shelf
+        val saved = _savedPaperIds.value.toMutableSet()
+        if (saved.add(paperId)) {
+            _savedPaperIds.value = saved
+        }
+        return true
+    }
+
+    override suspend fun removePaperFromShelf(paperId: String, shelfId: String): Boolean {
+        val current = _shelves.value.toMutableList()
+        val idx = current.indexOfFirst { it.id == shelfId }
+        if (idx < 0) return false
+        val shelf = current[idx]
+        if (shelf.paperIds.contains(paperId)) {
+            val updatedPaperIds = shelf.paperIds.toMutableList().apply { remove(paperId) }
+            current[idx] = shelf.copy(paperIds = updatedPaperIds)
+            _shelves.value = current
+        }
+        return true
+    }
+
+    override suspend fun toggleSavePaper(paperId: String): Boolean {
+        val currentSaved = _savedPaperIds.value.toMutableSet()
+        val wasSaved = currentSaved.contains(paperId)
+        if (wasSaved) {
+            currentSaved.remove(paperId)
+            // Also clean up from all shelves if unsaved from general library
+            val currentShelves = _shelves.value.toMutableList()
+            for (i in currentShelves.indices) {
+                val shelf = currentShelves[i]
+                if (shelf.paperIds.contains(paperId)) {
+                    currentShelves[i] = shelf.copy(paperIds = shelf.paperIds.toMutableList().apply { remove(paperId) })
+                }
+            }
+            _shelves.value = currentShelves
+        } else {
+            currentSaved.add(paperId)
+        }
+        _savedPaperIds.value = currentSaved
+        return true
+    }
+
+    override fun isPaperSaved(paperId: String): Flow<Boolean> = flow {
+        _savedPaperIds.collect { emit(it.contains(paperId)) }
     }
 }
 

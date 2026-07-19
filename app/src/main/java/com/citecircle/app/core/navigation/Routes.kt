@@ -21,6 +21,7 @@ sealed interface CcRoute
 @Serializable object QuickPostRoute : CcRoute
 @Serializable object NetworkRoute : CcRoute
 @Serializable object ProfileRoute : CcRoute
+@Serializable object LibraryRoute : CcRoute
 
 // Detail screens
 @Serializable data class CircleDetailRoute(val circleId: String) : CcRoute

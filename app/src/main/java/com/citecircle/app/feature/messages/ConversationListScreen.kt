@@ -24,7 +24,6 @@ import androidx.lifecycle.viewModelScope
 import com.citecircle.app.core.data.MessageRepository
 import com.citecircle.app.core.designsystem.*
 import com.citecircle.app.core.model.Conversation
-import com.citecircle.app.feature.feed.formatRelativeTime
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -150,11 +149,9 @@ fun ConversationItemRow(
                     fontWeight = if (unread) FontWeight.Bold else FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                Text(
-                    text = conversation.lastMessage?.timestamp?.let { formatRelativeTime(it) } ?: "",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.ccColors.marginGray
-                )
+                conversation.lastMessage?.timestamp?.let { ts ->
+                    CcTimestamp(timestamp = ts)
+                }
             }
 
             Spacer(modifier = Modifier.height(4.dp))

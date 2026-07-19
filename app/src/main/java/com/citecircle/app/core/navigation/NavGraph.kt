@@ -60,6 +60,7 @@ import com.citecircle.app.feature.publish.PublishFlowScreen
 import com.citecircle.app.feature.publish.QuickPostScreen
 import com.citecircle.app.feature.search.SearchScreen
 import com.citecircle.app.feature.settings.SettingsScreen
+import com.citecircle.app.feature.library.LibraryScreen
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Main App Navigation Shell
@@ -207,6 +208,12 @@ fun CiteCircleNavHost(
                     onCircleClick = { circleId -> navController.navigate(CircleDetailRoute(circleId)) }
                 )
             }
+            composable<LibraryRoute> {
+                LibraryScreen(
+                    onBack = { navController.popBackStack() },
+                    onPaperClick = { paperId -> navController.navigate(PaperDetailRoute(paperId)) }
+                )
+            }
 
             // ── Detail screens ──
             composable<CircleDetailRoute> { backEntry ->
@@ -311,6 +318,7 @@ fun CiteCircleNavHost(
         if (showTopBar) {
             CcTopBar(
                 onSearchClick = { navController.navigate(SearchRoute) },
+                onLibraryClick = { navController.navigate(LibraryRoute) },
                 onNotificationsClick = { navController.navigate(NotificationsRoute) },
                 notificationCount = unreadNotifications,
                 onMessagesClick = { navController.navigate(MessagesRoute) },
@@ -351,6 +359,7 @@ fun CcTopBar(
     onSearchClick: () -> Unit,
     onNotificationsClick: () -> Unit,
     onMessagesClick: () -> Unit,
+    onLibraryClick: () -> Unit = {},
     onAiChatClick: () -> Unit = {},
     notificationCount: Int = 0,
     messageCount: Int = 0,
@@ -403,6 +412,17 @@ fun CcTopBar(
             Icon(
                 Icons.Outlined.Search,
                 contentDescription = "Search",
+                tint = MaterialTheme.ccColors.inkNavy
+            )
+        }
+
+        IconButton(
+            onClick = onLibraryClick,
+            modifier = Modifier.semantics { contentDescription = "Library" }
+        ) {
+            Icon(
+                Icons.Outlined.BookmarkBorder,
+                contentDescription = "Library",
                 tint = MaterialTheme.ccColors.inkNavy
             )
         }

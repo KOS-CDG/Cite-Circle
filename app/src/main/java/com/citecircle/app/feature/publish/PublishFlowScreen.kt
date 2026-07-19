@@ -21,7 +21,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -410,6 +412,7 @@ fun Step3AiReview(
     onRetry: () -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
+    val haptic = LocalHapticFeedback.current
 
     Box(modifier = Modifier.fillMaxSize()) {
         when (progress) {
@@ -505,7 +508,14 @@ fun Step3AiReview(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             CcSecondaryButton(text = "Revise Draft", onClick = onBackToEdit, modifier = Modifier.weight(1f).padding(end = 12.dp))
-                            CcPrimaryButton(text = "Publish anyway", onClick = onPublish, modifier = Modifier.weight(1f))
+                            CcPrimaryButton(
+                                text = "Publish anyway",
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onPublish()
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
                         }
                     }
                 }

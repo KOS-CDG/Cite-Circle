@@ -203,3 +203,16 @@ data class SearchResults(
     val circles: List<Circle> = emptyList(),
     val posts: List<Post> = emptyList()
 )
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Shelf (Library Folder)
+// ──────────────────────────────────────────────────────────────────────────────
+
+@Serializable
+data class Shelf(
+    val id: String,
+    val name: String,
+    val description: String = "",
+    val paperIds: List<String> = emptyList()
+)
+

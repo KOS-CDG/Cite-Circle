@@ -26,7 +26,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -203,6 +205,7 @@ fun QuickPostScreen(
     val papers by viewModel.papers.collectAsState()
 
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val snackbarHostState = remember { SnackbarHostState() }
     val focusRequester = remember { FocusRequester() }
 
@@ -249,7 +252,10 @@ fun QuickPostScreen(
                 },
                 actions = {
                     Button(
-                        onClick = { viewModel.submitPost() },
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            viewModel.submitPost()
+                        },
                         enabled = uiState.canSubmit,
                         shape = RoundedCornerShape(20.dp),
                         colors = ButtonDefaults.buttonColors(
