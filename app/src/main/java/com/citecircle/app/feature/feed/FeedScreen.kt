@@ -50,6 +50,9 @@ import javax.inject.Inject
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import kotlinx.coroutines.flow.collect
 
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.update
+
 // ──────────────────────────────────────────────────────────────────────────────
 // FeedUiState & FeedViewModel
 // ──────────────────────────────────────────────────────────────────────────────
@@ -80,6 +83,8 @@ class FeedViewModel @Inject constructor(
     val isRefreshing = _isRefreshing.asStateFlow()
 
     private val _postsFlow = postRepository.getFeedPosts()
+    private val _endorseOverrides = MutableStateFlow<Map<String, Pair<Boolean, Int>>>(emptyMap())
+    private val _saveOverrides = MutableStateFlow<Map<String, Boolean>>(emptyMap())
 
     private var lastPostsSize = -1
 
@@ -94,20 +99,40 @@ class FeedViewModel @Inject constructor(
         }
     }
 
+    private data class FeedParams(
+        val filter: String,
+        val topic: String,
+        val refreshing: Boolean
+    )
+
+    private val _feedParams = combine(_selectedFilter, _selectedTopic, _isRefreshing) { filter, topic, refreshing ->
+        FeedParams(filter, topic, refreshing)
+    }
+
     val uiState: StateFlow<FeedUiState> = combine(
         _postsFlow,
-        _selectedFilter,
-        _selectedTopic,
-        _isRefreshing
-    ) { posts, filter, topic, refreshing ->
+        _endorseOverrides,
+        _saveOverrides,
+        _feedParams
+    ) { posts, endorseOverrides, saveOverrides, params ->
+        val (filter, topic, refreshing) = params
         if (refreshing) {
             FeedUiState.Loading
         } else {
+            val mappedPosts = posts.map { post ->
+                val overrideE = endorseOverrides[post.id]
+                val overrideS = saveOverrides[post.id]
+                post.copy(
+                    isEndorsed = overrideE?.first ?: post.isEndorsed,
+                    endorseCount = overrideE?.second ?: post.endorseCount,
+                    isSaved = overrideS ?: post.isSaved
+                )
+            }
             val baseFiltered = when (filter) {
-                "Following" -> posts.filter { it.author.isFollowing }
-                "My Field" -> posts.filter { it.author.fieldOfStudy == "Human-Computer Interaction" } // Match current user field
-                "Trending" -> posts.sortedByDescending { it.endorseCount }
-                else -> posts // For You
+                "Following" -> mappedPosts.filter { it.author.isFollowing }
+                "My Field" -> mappedPosts.filter { it.author.fieldOfStudy == "Human-Computer Interaction" }
+                "Trending" -> mappedPosts.sortedByDescending { it.endorseCount }
+                else -> mappedPosts
             }
             val finalFiltered = if (topic == "All Topics") {
                 baseFiltered
@@ -123,7 +148,6 @@ class FeedViewModel @Inject constructor(
 
     fun setFilter(filter: String) {
         _selectedFilter.value = filter
-        // Reset topic when changing main filters to keep feed state consistent
         _selectedTopic.value = "All Topics"
     }
 
@@ -134,24 +158,34 @@ class FeedViewModel @Inject constructor(
     fun refreshFeed() {
         viewModelScope.launch {
             _isRefreshing.value = true
-            delay(1000) // Simulated network call delay
+            delay(1000)
             _isRefreshing.value = false
         }
     }
 
     fun endorsePost(postId: String) {
         viewModelScope.launch {
+            val currentPosts = _postsFlow.firstOrNull() ?: emptyList()
+            val currentPost = currentPosts.find { it.id == postId }
+            val (currentEndorsed, currentCount) = _endorseOverrides.value[postId]
+                ?: Pair(currentPost?.isEndorsed ?: false, currentPost?.endorseCount ?: 0)
+            val newEndorsed = !currentEndorsed
+            val newCount = if (newEndorsed) currentCount + 1 else maxOf(0, currentCount - 1)
+            _endorseOverrides.update { it + (postId to Pair(newEndorsed, newCount)) }
             postRepository.endorsePost(postId)
         }
     }
 
     fun savePost(postId: String) {
         viewModelScope.launch {
+            val currentPosts = _postsFlow.firstOrNull() ?: emptyList()
+            val currentPost = currentPosts.find { it.id == postId }
+            val currentSaved = _saveOverrides.value[postId] ?: (currentPost?.isSaved ?: false)
+            val newSaved = !currentSaved
+            _saveOverrides.update { it + (postId to newSaved) }
             postRepository.savePost(postId)
         }
     }
-
-
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

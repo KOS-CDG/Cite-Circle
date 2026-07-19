@@ -58,6 +58,9 @@ class ProfileSetupViewModel @Inject constructor(
     private val userRepository: UserRepository,
     private val circleRepository: CircleRepository
 ) : ViewModel() {
+    val currentUser = userRepository.getCurrentUser()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), User(id = "", name = ""))
+
     val suggestedPeople = userRepository.getSuggestedConnections()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -94,7 +97,7 @@ class ProfileSetupViewModel @Inject constructor(
 
     fun saveProfile(name: String, institution: String, avatarUrl: String, interests: List<String>, onComplete: () -> Unit) {
         viewModelScope.launch {
-            val user = FakeDataSource.currentUser.copy(
+            val user = currentUser.value.copy(
                 name = name,
                 institution = institution,
                 avatarUrl = avatarUrl,
@@ -122,12 +125,13 @@ fun ProfileSetupScreen(
     onSetupComplete: () -> Unit,
     viewModel: ProfileSetupViewModel = hiltViewModel()
 ) {
+    val currentUser by viewModel.currentUser.collectAsState()
     var step by remember { mutableStateOf(1) }
 
     // Step 1 states
-    var name by remember { mutableStateOf(FakeDataSource.currentUser.name) }
-    var institution by remember { mutableStateOf(FakeDataSource.currentUser.institution) }
-    var avatarUrl by remember { mutableStateOf(FakeDataSource.currentUser.avatarUrl) }
+    var name by remember(currentUser) { mutableStateOf(currentUser.name) }
+    var institution by remember(currentUser) { mutableStateOf(currentUser.institution) }
+    var avatarUrl by remember(currentUser) { mutableStateOf(currentUser.avatarUrl) }
 
     // Step 2 states
     var selectedInterests by remember { mutableStateOf<Set<String>>(emptySet()) }

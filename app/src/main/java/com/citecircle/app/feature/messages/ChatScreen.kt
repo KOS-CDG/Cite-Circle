@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -199,9 +200,10 @@ class ChatViewModel @Inject constructor(
         // Only resolve the recipient from conversations for non-AI chats
         if (convId != "conv_ai") {
             viewModelScope.launch {
+                val currentUserId = userRepository.getCurrentUser().stateIn(viewModelScope).value.id
                 messageRepository.getConversations().collect { convs ->
                     val conv = convs.find { it.id == convId }
-                    val recUser = conv?.participants?.firstOrNull { it.id != "u0" }
+                    val recUser = conv?.participants?.firstOrNull { it.id != currentUserId } ?: conv?.participants?.firstOrNull()
                     if (recUser != null) _recipient.value = recUser
                 }
             }
@@ -223,6 +225,20 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             messageRepository.sendMessage(convId, content)
             // After the backend responds (including AI reply), refresh messages
+            messageJob?.cancel()
+            messageJob = viewModelScope.launch {
+                messageRepository.getMessagesForConversation(convId).collect {
+                    _messages.value = it
+                }
+            }
+        }
+    }
+
+    fun clearChatHistory() {
+        val convId = _conversationId.value
+        if (convId.isBlank()) return
+        viewModelScope.launch {
+            messageRepository.clearChatHistory(convId)
             messageJob?.cancel()
             messageJob = viewModelScope.launch {
                 messageRepository.getMessagesForConversation(convId).collect {
@@ -255,6 +271,7 @@ fun ChatScreen(
 
     val state by viewModel.state.collectAsState()
     var messageText by remember { mutableStateOf("") }
+    var showClearDialog by remember { mutableStateOf(false) }
 
     val isAiChat = (state as? ChatScreenState.Success)?.recipient?.id == "ai_copilot"
 
@@ -264,6 +281,36 @@ fun ChatScreen(
         "✍️ Tips for literature review",
         "📝 How to write research methodology"
     )
+
+    if (showClearDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearDialog = false },
+            title = { Text("Clear Chat History?") },
+            text = {
+                Text(
+                    if (isAiChat)
+                        "Are you sure you want to clear your AI Copilot conversation history? This will delete all saved messages for this chat."
+                    else
+                        "Are you sure you want to clear all messages in this conversation?"
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showClearDialog = false
+                        viewModel.clearChatHistory()
+                    }
+                ) {
+                    Text("Clear History", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -313,9 +360,19 @@ fun ChatScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
+                actions = {
+                    IconButton(onClick = { showClearDialog = true }) {
+                        Icon(
+                            imageVector = Icons.Filled.Delete,
+                            contentDescription = "Clear Chat History",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
         },
+
         bottomBar = {
             Surface(
                 tonalElevation = 8.dp,

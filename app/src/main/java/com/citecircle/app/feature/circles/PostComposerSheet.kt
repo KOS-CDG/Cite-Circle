@@ -25,6 +25,7 @@ import com.citecircle.app.core.model.Post
 import com.citecircle.app.core.model.PostFlair
 import com.citecircle.app.core.model.PostType
 import com.citecircle.app.core.data.PostRepository
+import com.citecircle.app.core.data.UserRepository
 import kotlinx.coroutines.launch
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -38,22 +39,26 @@ import javax.inject.Inject
 
 @HiltViewModel
 class ComposerViewModel @Inject constructor(
-    private val postRepository: PostRepository
+    private val postRepository: PostRepository,
+    private val userRepository: UserRepository
 ) : ViewModel() {
     fun createCirclePost(circle: Circle, content: String, flair: PostFlair, pdfName: String?, onComplete: () -> Unit) {
         viewModelScope.launch {
-            val newPost = Post(
-                id = "post_${System.currentTimeMillis()}",
-                author = com.citecircle.app.core.data.FakeDataSource.currentUser,
-                content = content,
-                type = PostType.DISCUSSION,
-                flair = flair,
-                circleId = circle.id,
-                circleName = circle.name,
-                timestamp = System.currentTimeMillis()
-            )
-            postRepository.createPost(newPost)
-            onComplete()
+            userRepository.getCurrentUser().collect { currentUser ->
+                val newPost = Post(
+                    id = "post_${System.currentTimeMillis()}",
+                    author = currentUser,
+                    content = content,
+                    type = PostType.DISCUSSION,
+                    flair = flair,
+                    circleId = circle.id,
+                    circleName = circle.name,
+                    timestamp = System.currentTimeMillis()
+                )
+                postRepository.createPost(newPost)
+                onComplete()
+                return@collect
+            }
         }
     }
 }

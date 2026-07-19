@@ -100,13 +100,13 @@ fun ComponentGalleryScreen(
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        CcAvatar(user = FakeDataSource.currentUser.copy(role = UserRole.EDUCATOR), size = 44.dp)
+                        CcAvatar(user = com.citecircle.app.core.model.User(id = "g1", name = "Gallery User", role = UserRole.EDUCATOR), size = 44.dp)
                         Text("Professor ring", style = MaterialTheme.typography.labelSmall)
 
-                        CcAvatar(user = FakeDataSource.currentUser.copy(isVerified = true), size = 44.dp)
+                        CcAvatar(user = com.citecircle.app.core.model.User(id = "g2", name = "Gallery User", isVerified = true), size = 44.dp)
                         Text("Verified researcher", style = MaterialTheme.typography.labelSmall)
 
-                        CcAvatar(user = FakeDataSource.currentUser.copy(role = UserRole.STUDENT), size = 44.dp)
+                        CcAvatar(user = com.citecircle.app.core.model.User(id = "g3", name = "Gallery User", role = UserRole.STUDENT), size = 44.dp)
                         Text("Student ring", style = MaterialTheme.typography.labelSmall)
                     }
                 }

@@ -76,6 +76,8 @@ data class PostDto(
     @SerialName("milestone_text") val milestoneText: String? = null,
     val flair: String = "NONE",
     @SerialName("image_url") val imageUrl: String? = null,
+    @SerialName("is_endorsed") val isEndorsed: Boolean = false,
+    @SerialName("is_saved") val isSaved: Boolean = false,
 )
 
 @Serializable
@@ -275,6 +277,15 @@ interface CiteCircleApi {
     @POST("posts/{postId}/endorse")
     suspend fun toggleEndorse(@Path("postId") postId: String): EndorseResponseDto
 
+    @POST("posts/{postId}/save")
+    suspend fun toggleSavePost(@Path("postId") postId: String): Map<String, Boolean>
+
+    @GET("posts/saved")
+    suspend fun getSavedPosts(
+        @Query("limit") limit: Int = 50,
+        @Query("offset") offset: Int = 0,
+    ): List<PostDto>
+
     // ── Comments ──────────────────────────────────────────────────────────────
 
     @GET("posts/{postId}/comments")
@@ -296,6 +307,9 @@ interface CiteCircleApi {
 
     @GET("papers/{paperId}")
     suspend fun getPaper(@Path("paperId") paperId: String): PaperDto
+
+    @POST("papers/{paperId}/cite")
+    suspend fun citePaper(@Path("paperId") paperId: String): Map<String, @JvmSuppressWildcards Any>
 
     @Multipart
     @POST("papers/publish")
@@ -329,6 +343,12 @@ interface CiteCircleApi {
         @Path("conversationId") conversationId: String,
         @Body body: MessageCreateDto,
     ): List<MessageDto>
+
+    @DELETE("conversations/{conversationId}/messages")
+    suspend fun clearMessages(
+        @Path("conversationId") conversationId: String,
+    ): Map<String, Boolean>
+
 
     // ── Circles ───────────────────────────────────────────────────────────────
 

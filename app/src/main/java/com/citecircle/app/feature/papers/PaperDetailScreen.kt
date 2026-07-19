@@ -123,6 +123,19 @@ class PaperDetailViewModel @Inject constructor(
         }
     }
 
+    fun citePaper(paperId: String) {
+        viewModelScope.launch {
+            val updated = paperRepository.citePaper(paperId)
+            if (updated.title.isNotEmpty()) {
+                _paper.value = _paper.value?.copy(citationCount = updated.citationCount) ?: updated
+            } else {
+                _paper.value?.let { current ->
+                    _paper.value = current.copy(citationCount = current.citationCount + 1)
+                }
+            }
+        }
+    }
+
     fun loadSummary(paperId: String, title: String, abstract: String, force: Boolean = false) {
         if (_summaryState.value is SummaryUiState.Success && !force) return
         viewModelScope.launch {
@@ -376,6 +389,7 @@ fun PaperDetailScreen(
                             onClick = {
                                 val textCitation = "${p.authors.firstOrNull()?.name ?: "Unknown"} et al. (${p.year}). ${p.title}. ${p.journal}. DOI: ${p.doi}"
                                 clipboardManager.setText(AnnotatedString(textCitation))
+                                viewModel.citePaper(p.id)
                             },
                             icon = Icons.Outlined.ContentCopy,
                             modifier = Modifier.weight(1f).padding(end = 8.dp)

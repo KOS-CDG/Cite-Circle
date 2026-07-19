@@ -141,7 +141,7 @@ fun ConversationItemRow(
     conversation: Conversation,
     onClick: () -> Unit
 ) {
-    val recipient = conversation.participants.firstOrNull { it.id != "u0" } ?: return
+    val recipient = conversation.participants.lastOrNull() ?: conversation.participants.firstOrNull() ?: return
     val unread = conversation.unreadCount > 0
 
     Row(

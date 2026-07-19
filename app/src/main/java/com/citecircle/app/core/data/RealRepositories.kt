@@ -51,6 +51,8 @@ private fun PostDto.toDomain(author: User = User(id = authorId, name = "")) = Po
     timestamp = timestamp,
     endorseCount = endorseCount,
     commentCount = commentCount,
+    isEndorsed = isEndorsed,
+    isSaved = isSaved,
     circleId = circleId,
     milestoneText = milestoneText,
     flair = runCatching { PostFlair.valueOf(flair) }.getOrDefault(PostFlair.NONE),
@@ -488,7 +490,12 @@ class RealPostRepository @Inject constructor(
         } catch (e: Exception) { false }
     }
 
-    override suspend fun savePost(postId: String): Boolean = true // local-only for now
+    override suspend fun savePost(postId: String): Boolean {
+        return try {
+            val resp = api.toggleSavePost(postId)
+            resp["saved"] ?: true
+        } catch (e: Exception) { false }
+    }
 
     override suspend fun createPost(post: Post): Boolean {
         return try {
@@ -604,6 +611,15 @@ class RealPaperRepository @Inject constructor(
             circleId = null
         )
         return response.paper.toDomain()
+    }
+
+    override suspend fun citePaper(paperId: String): Paper {
+        return try {
+            api.citePaper(paperId)
+            api.getPaper(paperId).toDomain()
+        } catch (e: Exception) {
+            Paper(id = paperId, title = "")
+        }
     }
 
     override suspend fun getPaperSummary(paperId: String, title: String, abstract: String): String {
@@ -893,9 +909,25 @@ class RealMessageRepository @Inject constructor(
     }
 
     override fun getMessagesForConversation(convId: String): Flow<List<Message>> = flow {
-        try {
-            emit(api.getMessages(convId).map { it.toDomain() })
-        } catch (e: Exception) { emit(emptyList()) }
+        if (convId == "conv_ai") {
+            ensureAiMessagesLoaded()
+            try {
+                val remoteMsgs = api.getMessages(convId).map { it.toDomain() }
+                if (remoteMsgs.isNotEmpty()) {
+                    _aiMessages.value = remoteMsgs
+                    runCatching {
+                        tokenManager.saveAiMessagesJson(json.encodeToString(ListSerializer(Message.serializer()), remoteMsgs))
+                    }
+                    emit(remoteMsgs)
+                    return@flow
+                }
+            } catch (_: Exception) {}
+            emit(_aiMessages.value)
+        } else {
+            try {
+                emit(api.getMessages(convId).map { it.toDomain() })
+            } catch (e: Exception) { emit(emptyList()) }
+        }
     }
 
     override suspend fun sendMessage(convId: String, content: String): Message {
@@ -911,6 +943,28 @@ class RealMessageRepository @Inject constructor(
             )
         }
     }
+
+    override suspend fun clearChatHistory(convId: String): Boolean {
+        if (convId == "conv_ai") {
+            val welcome = Message(
+                id = "msg_ai_welcome_${System.currentTimeMillis()}",
+                senderId = "ai_copilot",
+                content = "Welcome to CiteCircle AI Copilot! Chat history has been cleared. Feel free to ask me anything about research literature, paper drafts, statistical methodology, or peer review feedback.",
+                timestamp = System.currentTimeMillis()
+            )
+            _aiMessages.value = listOf(welcome)
+            runCatching {
+                tokenManager.saveAiMessagesJson(json.encodeToString(ListSerializer(Message.serializer()), _aiMessages.value))
+            }
+        }
+        return try {
+            api.clearMessages(convId)
+            true
+        } catch (e: Exception) {
+            true
+        }
+    }
+
 
 
     override suspend fun searchUsers(query: String): List<User> {

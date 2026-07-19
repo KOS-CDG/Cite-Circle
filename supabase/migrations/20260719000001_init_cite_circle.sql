@@ -345,53 +345,7 @@ CREATE INDEX idx_messages_conversation ON messages(conversation_id, timestamp AS
 CREATE INDEX idx_notifications_receiver ON notifications(receiver_id, timestamp DESC);
 
 -- =============================================================================
--- 8. INITIAL SEED DATA (Realistic academics and circles)
+-- 8. INITIAL SEED DATA
+-- All placeholder data and pre-seeded accounts have been removed.
+-- Accounts and content will be created dynamically by users.
 -- =============================================================================
-
-INSERT INTO users (id, name, avatar_url, role, institution, field_of_study, bio, orcid_id, citation_count, is_verified, interests) VALUES
-('u0', 'Maya Okafor', 'https://api.dicebear.com/8.x/avataaars/svg?seed=maya', 'RESEARCHER', 'MIT Media Lab', 'Human-Computer Interaction', 'PhD candidate exploring situated cognition in AI-augmented workspaces. Ex-Google Brain. She/her.', '0000-0002-7834-1291', 1240, TRUE, '{"HCI", "AI", "Cognitive Science", "Design"}'),
-('u1', 'Dr. Elena Reyes', 'https://api.dicebear.com/8.x/avataaars/svg?seed=elena', 'EDUCATOR', 'Stanford University', 'Computational Biology', 'Associate Professor of Computational Biology. PI of the Reyes Lab. NSF CAREER Award 2021.', '0000-0001-5523-4521', 8740, TRUE, '{"Genomics", "Machine Learning", "Proteomics"}'),
-('u2', 'Prof. James Whitmore', 'https://api.dicebear.com/8.x/avataaars/svg?seed=james', 'EDUCATOR', 'Harvard University', 'Cognitive Neuroscience', 'William James Professor of Cognitive Science. Bestselling author of ''The Attention Economy of the Mind''.', '0000-0003-1234-5678', 34200, TRUE, '{"Neuroscience", "Psychology", "Decision Making"}'),
-('u3', 'Aisha Nakamura', 'https://api.dicebear.com/8.x/avataaars/svg?seed=aisha', 'RESEARCHER', 'University of Tokyo', 'Quantum Computing', 'Postdoctoral researcher in quantum error correction. JST Fellowship. Interested in fault-tolerant computation.', '0000-0002-9981-3345', 3100, TRUE, '{"Quantum Computing", "Physics", "Information Theory"}'),
-('u4', 'Carlos Mendoza', 'https://api.dicebear.com/8.x/avataaars/svg?seed=carlos', 'STUDENT', 'UC Berkeley', 'Machine Learning', '3rd-year PhD student in CS, advised by Prof. Jordan. Working on causal inference in large language models.', '', 245, FALSE, '{"Machine Learning", "Causality", "NLP"}');
-
-INSERT INTO circles (id, name, description, icon_emoji, banner_color, category, post_count, weekly_post_count) VALUES
-('c1', 'Machine Learning Frontiers', 'Cutting-edge ML research: architectures, theory, applications, and reproducibility challenges.', '🤖', 4282246109, 'Computer Science', 8900, 340),
-('c2', 'Genomics & Precision Medicine', 'From GWAS to gene therapy: a community for genomicists and clinicians.', '🧬', 4280955814, 'Life Sciences', 5600, 218),
-('c3', 'Cognitive & Behavioral Sciences', 'Bridging experimental psychology, neuroscience, and computational modeling of the mind.', '🧠', 4294937451, 'Social Sciences', 3100, 145);
-
--- Seed Memberships (Trigger will auto-update member_count)
-INSERT INTO circle_members (circle_id, user_id) VALUES
-('c1', 'u0'),
-('c1', 'u4'),
-('c2', 'u1'),
-('c3', 'u2');
-
--- Seed Followers (Trigger will auto-update follower_counts)
-INSERT INTO followers (follower_id, following_id) VALUES
-('u0', 'u1'),
-('u1', 'u0'),
-('u4', 'u0'),
-('u0', 'u3');
-
-INSERT INTO papers (id, title, abstract, citation_count, year, doi, circle_id, is_published, ai_score, journal) VALUES
-('p1', 'Situated Cognition in AI-Augmented Knowledge Work: A Mixed-Methods Study of Academic Researchers', 'As AI writing and analysis tools become embedded in research workflows, questions arise about cognitive load...', 48, 2024, '10.1145/3613904.3642234', 'c1', TRUE, 87, 'CHI 2024'),
-('p2', 'Polygenic Risk Score Calibration Across Diverse Ancestry Groups: Lessons from the PAGE Study', 'Polygenic risk scores (PRS) derived predominantly from European ancestry GWAS cohorts exhibit reduced accuracy...', 312, 2023, '10.1038/s41588-023-01429-8', 'c2', TRUE, 94, 'Nature Genetics');
-
-INSERT INTO paper_authors (paper_id, user_id) VALUES
-('p1', 'u0'),
-('p1', 'u1'),
-('p2', 'u1');
-
-INSERT INTO posts (id, author_id, content, type, timestamp, circle_id, attached_paper_id, flair) VALUES
-('post1', 'u0', 'Thrilled to share our new paper on situated cognition in AI-augmented workspaces. Check it out!', 'PAPER_SHARE', 1721360000000, 'c1', 'p1', 'RESOURCE'),
-('post2', 'u4', 'Has anyone tried running the PAGE study calibration weights on local clinical datasets?', 'DISCUSSION', 1721365000000, 'c1', 'p2', 'QUESTION');
-
--- Seed Endorsements (Trigger will auto-update endorse_count)
-INSERT INTO post_endorsements (post_id, user_id) VALUES
-('post1', 'u4'),
-('post1', 'u1');
-
--- Seed Comments (Trigger will auto-update comment_count)
-INSERT INTO comments (id, author_id, post_id, content, timestamp) VALUES
-('cm1', 'u1', 'post1', 'Excellent framework. The distributed epistemic scaffolding concept is exactly what is needed.', 1721362000000);

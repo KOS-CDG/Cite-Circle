@@ -34,6 +34,7 @@ interface PaperRepository {
     fun getPapersForUser(userId: String): Flow<List<Paper>>
     fun getPapersForCircle(circleId: String): Flow<List<Paper>>
     suspend fun publishPaper(draft: PaperDraft): Paper
+    suspend fun citePaper(paperId: String): Paper
     suspend fun getPaperSummary(paperId: String, title: String, abstract: String): String
     fun getSavedPapers(): Flow<List<Paper>>
     fun getShelves(): Flow<List<Shelf>>
@@ -74,6 +75,7 @@ interface MessageRepository {
     fun getConversations(): Flow<List<Conversation>>
     fun getMessagesForConversation(convId: String): Flow<List<Message>>
     suspend fun sendMessage(convId: String, content: String): Message
+    suspend fun clearChatHistory(convId: String): Boolean
     suspend fun searchUsers(query: String): List<User>
 }
 
@@ -175,14 +177,8 @@ class FakePaperRepository @Inject constructor(
 ) : PaperRepository {
     private val _papers = MutableStateFlow(FakeDataSource.papers)
     private val _summaryCache = mutableMapOf<String, String>()
-    private val _savedPaperIds = MutableStateFlow(mutableSetOf("p1", "p2"))
-    private val _shelves = MutableStateFlow(
-        listOf(
-            Shelf("s1", "To Read", "Papers to read later", listOf("p1")),
-            Shelf("s2", "HCI & AI Research", "Interaction models for AI agents", listOf("p1")),
-            Shelf("s3", "Thesis References", "Key bibliography", listOf("p2"))
-        )
-    )
+    private val _savedPaperIds = MutableStateFlow(mutableSetOf<String>())
+    private val _shelves = MutableStateFlow<List<Shelf>>(emptyList())
 
     override fun getAllPapers(): Flow<List<Paper>> = _papers.asStateFlow()
 
@@ -212,6 +208,19 @@ class FakePaperRepository @Inject constructor(
         val current = _papers.value.toMutableList()
         current.add(0, paper)
         _papers.value = current
+        return paper
+    }
+
+    override suspend fun citePaper(paperId: String): Paper {
+        val current = _papers.value.toMutableList()
+        val idx = current.indexOfFirst { it.id == paperId }
+        if (idx >= 0) {
+            val updated = current[idx].copy(citationCount = current[idx].citationCount + 1)
+            current[idx] = updated
+            _papers.value = current
+            return updated
+        }
+        val paper = Paper(id = paperId, title = "Cited Paper", citationCount = 1)
         return paper
     }
 
@@ -511,6 +520,29 @@ class FakeMessageRepository @Inject constructor(
         return msg
     }
 
+    override suspend fun clearChatHistory(convId: String): Boolean {
+        val flow = getMsgFlow(convId)
+        if (convId == "conv_ai") {
+            val welcome = Message(
+                id = "msg_ai_welcome_${System.currentTimeMillis()}",
+                senderId = "ai_copilot",
+                content = "Welcome to CiteCircle AI Copilot! Chat history has been cleared. Feel free to ask me anything about research literature, paper drafts, statistical methodology, or peer review feedback.",
+                timestamp = System.currentTimeMillis()
+            )
+            flow.value = listOf(welcome)
+        } else {
+            flow.value = emptyList()
+        }
+        val current = _conversations.value.toMutableList()
+        val idx = current.indexOfFirst { it.id == convId }
+        if (idx >= 0) {
+            current[idx] = current[idx].copy(lastMessage = flow.value.lastOrNull(), unreadCount = 0)
+            _conversations.value = current
+        }
+        return true
+    }
+
+
     private suspend fun getAiReply(flow: MutableStateFlow<List<Message>>) {
         try {
             val modelId = "accounts/fireworks/models/deepseek-v4-pro"
@@ -648,9 +680,7 @@ class FakeAiReviewRepository @Inject constructor() : AiReviewRepository {
 }
 
 class FakeSearchRepository @Inject constructor() : SearchRepository {
-    private val _recentSearches = MutableStateFlow<List<String>>(
-        listOf("causal inference LLMs", "genomics population", "quantum error correction")
-    )
+    private val _recentSearches = MutableStateFlow<List<String>>(emptyList())
 
     override suspend fun search(query: String): SearchResults {
         if (query.isBlank()) return SearchResults()
@@ -694,40 +724,33 @@ class FakeSearchRepository @Inject constructor() : SearchRepository {
 class FakeAuthRepository @Inject constructor(
     private val userRepository: UserRepository
 ) : AuthRepository {
-    private var _loggedIn = true
-    private val _savedAccounts = MutableStateFlow<List<SavedAccount>>(
-        listOf(
-            SavedAccount(
-                userId = FakeDataSource.currentUser.id,
-                email = "user@citecircle.org",
-                name = FakeDataSource.currentUser.name,
-                avatarUrl = FakeDataSource.currentUser.avatarUrl,
-                role = FakeDataSource.currentUser.role.name,
-                isActive = true
-            ),
-            SavedAccount(
-                userId = FakeDataSource.dummyUser.id,
-                email = "researcher.dummy@stanford.edu",
-                name = FakeDataSource.dummyUser.name,
-                avatarUrl = FakeDataSource.dummyUser.avatarUrl,
-                role = FakeDataSource.dummyUser.role.name,
-                isActive = false
-            )
-        )
-    )
+    private var _loggedIn = false
+    private val _savedAccounts = MutableStateFlow<List<SavedAccount>>(emptyList())
 
     override fun isLoggedIn(): Boolean = _loggedIn
 
     override suspend fun login(email: String, password: String): Boolean {
         delay(800)
         _loggedIn = true
-        val loggedInUser = when {
-            email.contains("admin", ignoreCase = true) -> FakeDataSource.superAdminUser
-            email.contains("dummy", ignoreCase = true) -> FakeDataSource.dummyUser
-            else -> FakeDataSource.defaultUser
-        }
+        val nameFromEmail = email.substringBefore("@").split(".").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+        val loggedInUser = User(
+            id = "u_${kotlin.math.abs(email.hashCode())}",
+            name = if (nameFromEmail.isNotBlank()) nameFromEmail else "Scholar",
+            avatarUrl = "https://api.dicebear.com/8.x/avataaars/svg?seed=$email",
+            role = UserRole.STUDENT,
+            institution = "CiteCircle Affiliate"
+        )
         userRepository.updateCurrentUser(loggedInUser)
-        updateSavedAccountList(loggedInUser, email)
+        _savedAccounts.value = listOf(
+            SavedAccount(
+                userId = loggedInUser.id,
+                email = email,
+                name = loggedInUser.name,
+                avatarUrl = loggedInUser.avatarUrl,
+                role = loggedInUser.role.name,
+                isActive = true
+            )
+        )
         return true
     }
 
@@ -744,7 +767,16 @@ class FakeAuthRepository @Inject constructor(
             interests = emptyList()
         )
         userRepository.updateCurrentUser(newUser)
-        updateSavedAccountList(newUser, email)
+        _savedAccounts.value = listOf(
+            SavedAccount(
+                userId = newUser.id,
+                email = email,
+                name = newUser.name,
+                avatarUrl = newUser.avatarUrl,
+                role = newUser.role.name,
+                isActive = true
+            )
+        )
         return true
     }
 
