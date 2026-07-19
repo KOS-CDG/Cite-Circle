@@ -3,14 +3,19 @@ package com.citecircle.app.feature.messages
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -67,7 +72,6 @@ class ChatViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            // Find participant who isn't current user
             messageRepository.getConversations().collect { convs ->
                 val conv = convs.find { it.id == convId }
                 val recUser = conv?.participants?.firstOrNull { it.id != "u0" }
@@ -107,6 +111,15 @@ fun ChatScreen(
     val state by viewModel.state.collectAsState()
     var messageText by remember { mutableStateOf("") }
 
+    val isAiChat = (state as? ChatScreenState.Success)?.recipient?.id == "ai_copilot"
+
+    val samplePromptChips = listOf(
+        "💡 Review my abstract",
+        "📊 Explain P-value vs Effect Size",
+        "✍️ Tips for literature review",
+        "📝 How to write research methodology"
+    )
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -114,11 +127,36 @@ fun ChatScreen(
                     val s = state
                     if (s is ChatScreenState.Success) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            CcAvatar(user = s.recipient, size = 36.dp)
+                            if (s.recipient.id == "ai_copilot") {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.primaryContainer),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Filled.AutoAwesome,
+                                        contentDescription = "AI Icon",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            } else {
+                                CcAvatar(user = s.recipient, size = 36.dp)
+                            }
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
-                                Text(text = s.recipient.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                                Text(text = "Online", style = MaterialTheme.typography.labelSmall, color = CcColors.SeafoamTeal)
+                                Text(
+                                    text = s.recipient.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = if (s.recipient.id == "ai_copilot") "AI Assistant • Active" else "Online",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = CcColors.SeafoamTeal
+                                )
                             }
                         }
                     } else {
@@ -127,7 +165,7 @@ fun ChatScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -139,39 +177,71 @@ fun ChatScreen(
                 color = MaterialTheme.colorScheme.surface,
                 modifier = Modifier.imePadding()
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = messageText,
-                        onValueChange = { messageText = it },
-                        placeholder = { Text("Type message...", color = MaterialTheme.ccColors.marginGray) },
-                        maxLines = 4,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(24.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.ccColors.divider
-                        )
-                    )
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    IconButton(
-                        onClick = {
-                            if (messageText.isNotBlank()) {
-                                viewModel.sendMessage(messageText)
-                                messageText = ""
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    // Quick Action Chips for AI Copilot Chat
+                    if (isAiChat) {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(samplePromptChips) { chip ->
+                                Surface(
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f),
+                                    modifier = Modifier.clickable {
+                                        viewModel.sendMessage(chip.substringAfter(" "))
+                                    }
+                                ) {
+                                    Text(
+                                        text = chip,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Medium,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                    )
+                                }
                             }
-                        },
+                        }
+                    }
+
+                    Row(
                         modifier = Modifier
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary)
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Filled.Send, contentDescription = "Send message", tint = Color.White)
+                        OutlinedTextField(
+                            value = messageText,
+                            onValueChange = { messageText = it },
+                            placeholder = {
+                                Text(
+                                    if (isAiChat) "Ask CiteCircle AI Copilot..." else "Type message...",
+                                    color = MaterialTheme.ccColors.marginGray
+                                )
+                            },
+                            maxLines = 4,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(24.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = MaterialTheme.ccColors.divider
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        IconButton(
+                            onClick = {
+                                if (messageText.isNotBlank()) {
+                                    viewModel.sendMessage(messageText)
+                                    messageText = ""
+                                }
+                            },
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary)
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send message", tint = Color.White)
+                        }
                     }
                 }
             }
@@ -188,7 +258,21 @@ fun ChatScreen(
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 }
                 is ChatScreenState.Success -> {
+                    val listState = rememberLazyListState()
+                    val isAiThinking = chatState.recipient.id == "ai_copilot" &&
+                            chatState.messages.isNotEmpty() &&
+                            chatState.messages.last().senderId == "u0"
+
+                    // Auto scroll to latest message or typing indicator
+                    LaunchedEffect(chatState.messages.size, isAiThinking) {
+                        val totalItems = chatState.messages.size + (if (isAiThinking) 1 else 0)
+                        if (totalItems > 0) {
+                            listState.animateScrollToItem(totalItems - 1)
+                        }
+                    }
+
                     LazyColumn(
+                        state = listState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -197,10 +281,6 @@ fun ChatScreen(
                             MessageBubble(message = msg, isMine = msg.senderId == "u0")
                         }
 
-                        // Show typing indicator only when the AI Copilot is thinking
-                        val isAiThinking = chatState.recipient.id == "ai_copilot" &&
-                                chatState.messages.isNotEmpty() &&
-                                chatState.messages.last().senderId == "u0"
                         if (isAiThinking) {
                             item {
                                 TypingIndicatorBubble()
@@ -218,7 +298,12 @@ fun MessageBubble(
     message: Message,
     isMine: Boolean
 ) {
-    val bubbleColor = if (isMine) CcColors.CircleBlue else MaterialTheme.colorScheme.surface
+    val isAiSender = message.senderId == "ai_copilot"
+    val bubbleColor = when {
+        isMine -> CcColors.CircleBlue
+        isAiSender -> MaterialTheme.colorScheme.surface
+        else -> MaterialTheme.colorScheme.surface
+    }
     val textColor = if (isMine) Color.White else MaterialTheme.colorScheme.onSurface
     val alignment = if (isMine) Alignment.CenterEnd else Alignment.CenterStart
     val bubbleShape = if (isMine) {
@@ -234,19 +319,46 @@ fun MessageBubble(
         Column(horizontalAlignment = if (isMine) Alignment.End else Alignment.Start) {
             Box(
                 modifier = Modifier
-                    .widthIn(max = 280.dp)
+                    .widthIn(max = 320.dp)
                     .clip(bubbleShape)
                     .background(bubbleColor)
-                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                    .then(
+                        if (isAiSender) Modifier.border(
+                            1.dp,
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
+                            bubbleShape
+                        ) else Modifier
+                    )
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
                 Column {
+                    if (isAiSender) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.AutoAwesome,
+                                contentDescription = "AI Copilot",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "CiteCircle AI",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
                     Text(
                         text = message.content,
                         color = textColor,
                         style = MaterialTheme.typography.bodyMedium
                     )
 
-                    // Renders attached paper sharing mini card stubs representation
                     if (message.attachedPaper != null) {
                         Spacer(modifier = Modifier.height(8.dp))
                         PaperMiniCard(paper = message.attachedPaper, onUserClick = {})
@@ -293,27 +405,36 @@ fun TypingIndicatorBubble() {
         label = "dot3"
     )
 
-    Box(
-        modifier = Modifier
-            .width(60.dp)
-            .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp, bottomStart = 0.dp, bottomEnd = 12.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(12.dp)
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .width(60.dp)
+                .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp, bottomStart = 0.dp, bottomEnd = 12.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f), RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp, bottomStart = 0.dp, bottomEnd = 12.dp))
+                .padding(12.dp)
         ) {
-            Canvas(modifier = Modifier.size(6.dp)) {
-                drawCircle(color = CcColors.MarginGray, radius = size.width / 2, center = Offset(size.width / 2, size.height / 2 + dot1Offset))
-            }
-            Canvas(modifier = Modifier.size(6.dp)) {
-                drawCircle(color = CcColors.MarginGray, radius = size.width / 2, center = Offset(size.width / 2, size.height / 2 + dot2Offset))
-            }
-            Canvas(modifier = Modifier.size(6.dp)) {
-                drawCircle(color = CcColors.MarginGray, radius = size.width / 2, center = Offset(size.width / 2, size.height / 2 + dot3Offset))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Canvas(modifier = Modifier.size(6.dp)) {
+                    drawCircle(color = CcColors.MarginGray, radius = size.width / 2, center = Offset(size.width / 2, size.height / 2 + dot1Offset))
+                }
+                Canvas(modifier = Modifier.size(6.dp)) {
+                    drawCircle(color = CcColors.MarginGray, radius = size.width / 2, center = Offset(size.width / 2, size.height / 2 + dot2Offset))
+                }
+                Canvas(modifier = Modifier.size(6.dp)) {
+                    drawCircle(color = CcColors.MarginGray, radius = size.width / 2, center = Offset(size.width / 2, size.height / 2 + dot3Offset))
+                }
             }
         }
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = "AI is thinking...",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.ccColors.marginGray
+        )
     }
 }

@@ -361,9 +361,14 @@ class FakeMessageRepository @Inject constructor(
         try {
             val modelId = "accounts/fireworks/models/gpt-oss-120b"
             val systemPrompt = """
-                You are CiteCircle AI Copilot, a helpful and highly knowledgeable assistant for academic researchers and students.
-                Your task is to answer questions about research, literature reviews, methodology, statistics, paper writing, and academic publishing.
-                Be clear, professional, rigorous, and encourage open science and proper citation guidelines.
+                You are CiteCircle AI Copilot, a brilliant academic research assistant for students, scientists, and university researchers.
+                Your job is to assist with research, literature reviews, methodology, statistics, paper writing, and academic publishing.
+                
+                Guidelines:
+                1. Respond directly, clearly, and concisely to the user's prompt.
+                2. Do not output meta-reasoning, step-by-step thinking, or internal analysis.
+                3. Use markdown elements (bullet points, bold text, numbered lists) to make responses easy to read.
+                4. Keep answers focused, encouraging, and academically rigorous.
             """.trimIndent()
 
             val history = flow.value.takeLast(10).map { msg ->
@@ -380,8 +385,15 @@ class FakeMessageRepository @Inject constructor(
             )
 
             val response = api.chatCompletions(request)
-            val replyText = response.choices.firstOrNull()?.message?.content
+            var replyText = response.choices.firstOrNull()?.message?.content
                 ?: "I apologize, but I couldn't formulate a reply. Please try again."
+
+            replyText = replyText.trim()
+            if (replyText.startsWith("```markdown")) {
+                replyText = replyText.removeSurrounding("```markdown", "```").trim()
+            } else if (replyText.startsWith("```")) {
+                replyText = replyText.removeSurrounding("```", "```").trim()
+            }
 
             val replyMsg = Message(
                 id = "msg_ai_${System.currentTimeMillis()}",
