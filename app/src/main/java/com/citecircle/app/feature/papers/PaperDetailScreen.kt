@@ -185,7 +185,8 @@ fun PaperDetailScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
                 actions = {
-                    val isSaved by viewModel.isPaperSaved(paperId).collectAsState(initial = false)
+                    val isSaved by remember(paperId) { viewModel.isPaperSaved(paperId) }
+                        .collectAsState(initial = false)
                     val shelves by viewModel.shelves.collectAsState()
                     var showShelfMenu by remember { mutableStateOf(false) }
 

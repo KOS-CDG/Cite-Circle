@@ -32,6 +32,7 @@ import com.citecircle.app.core.designsystem.*
 import com.citecircle.app.core.model.Comment
 import com.citecircle.app.core.model.Post
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -54,17 +55,46 @@ class CommentViewModel @Inject constructor(
     private val _comments = MutableStateFlow<List<Comment>>(emptyList())
     private val _post = MutableStateFlow<Post?>(null)
 
-    val state: StateFlow<CommentScreenState> = combine(_post, _comments) { post, comments ->
-        if (post == null) CommentScreenState.Loading
-        else CommentScreenState.Success(post, comments)
+    // Optimistic overrides so the endorse/save buttons update immediately,
+    // mirroring the pattern used in FeedViewModel.
+    private val _endorseOverride = MutableStateFlow<Pair<Boolean, Int>?>(null)
+    private val _saveOverride = MutableStateFlow<Boolean?>(null)
+
+    private var postJob: Job? = null
+    private var commentsJob: Job? = null
+
+    val state: StateFlow<CommentScreenState> = combine(
+        _post, _comments, _endorseOverride, _saveOverride
+    ) { post, comments, endorseOverride, saveOverride ->
+        if (post == null) {
+            CommentScreenState.Loading
+        } else {
+            val displayPost = post.copy(
+                isEndorsed = endorseOverride?.first ?: post.isEndorsed,
+                endorseCount = endorseOverride?.second ?: post.endorseCount,
+                isSaved = saveOverride ?: post.isSaved
+            )
+            CommentScreenState.Success(displayPost, comments)
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), CommentScreenState.Loading)
 
     fun loadPostData(postId: String) {
+        // Only clear optimistic overrides when actually navigating to a different
+        // post — addComment() re-triggers this with the same postId to refresh
+        // comments, and that shouldn't discard a pending endorse/save toggle.
+        if (_postId.value != postId) {
+            _endorseOverride.value = null
+            _saveOverride.value = null
+        }
         _postId.value = postId
-        viewModelScope.launch {
+
+        postJob?.cancel()
+        postJob = viewModelScope.launch {
             postRepository.getPostById(postId).collect { _post.value = it }
         }
-        viewModelScope.launch {
+
+        commentsJob?.cancel()
+        commentsJob = viewModelScope.launch {
             commentRepository.getCommentsForPost(postId).collect { _comments.value = it }
         }
     }
@@ -78,14 +108,23 @@ class CommentViewModel @Inject constructor(
     }
 
     fun endorsePost() {
+        val post = _post.value ?: return
         viewModelScope.launch {
-            _post.value?.id?.let { postRepository.endorsePost(it) }
+            val (currentEndorsed, currentCount) = _endorseOverride.value
+                ?: Pair(post.isEndorsed, post.endorseCount)
+            val newEndorsed = !currentEndorsed
+            val newCount = if (newEndorsed) currentCount + 1 else maxOf(0, currentCount - 1)
+            _endorseOverride.value = Pair(newEndorsed, newCount)
+            postRepository.endorsePost(post.id)
         }
     }
 
     fun savePost() {
+        val post = _post.value ?: return
         viewModelScope.launch {
-            _post.value?.id?.let { postRepository.savePost(it) }
+            val currentSaved = _saveOverride.value ?: post.isSaved
+            _saveOverride.value = !currentSaved
+            postRepository.savePost(post.id)
         }
     }
 }

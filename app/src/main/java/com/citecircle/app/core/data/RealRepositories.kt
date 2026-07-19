@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -727,9 +728,8 @@ class RealPaperRepository @Inject constructor(
         return true
     }
 
-    override fun isPaperSaved(paperId: String): Flow<Boolean> = flow {
-        emit(_savedPaperIds.value.contains(paperId))
-    }
+    override fun isPaperSaved(paperId: String): Flow<Boolean> =
+        _savedPaperIds.map { it.contains(paperId) }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
