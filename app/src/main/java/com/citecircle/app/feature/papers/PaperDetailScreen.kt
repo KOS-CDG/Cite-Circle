@@ -54,6 +54,9 @@ import javax.inject.Inject
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
 
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import kotlinx.coroutines.delay
+
 // ──────────────────────────────────────────────────────────────────────────────
 // SummaryUiState
 // ──────────────────────────────────────────────────────────────────────────────
@@ -80,11 +83,26 @@ class PaperDetailViewModel @Inject constructor(
     private val _summaryState = MutableStateFlow<SummaryUiState>(SummaryUiState.Idle)
     val summaryState: StateFlow<SummaryUiState> = _summaryState.asStateFlow()
 
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing = _isRefreshing.asStateFlow()
+
     fun loadPaperData(paperId: String) {
         viewModelScope.launch {
             paperRepository.getPaperById(paperId).collect {
                 _paper.value = it
             }
+        }
+    }
+
+    fun refreshPaperData(paperId: String) {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            loadPaperData(paperId)
+            _paper.value?.let { p ->
+                loadSummary(p.id, p.title, p.abstract, force = true)
+            }
+            delay(800)
+            _isRefreshing.value = false
         }
     }
 
@@ -139,6 +157,7 @@ fun PaperDetailScreen(
 
     val paper by viewModel.paper.collectAsState()
     val summaryState by viewModel.summaryState.collectAsState()
+    val isRefreshing by viewModel.isRefreshing.collectAsState()
     val scrollState = rememberScrollState()
     val clipboardManager = LocalClipboardManager.current
 
@@ -210,7 +229,9 @@ fun PaperDetailScreen(
             )
         }
     ) { paddingValues ->
-        Box(
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = { viewModel.refreshPaperData(paperId) },
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.ccColors.paperCream)

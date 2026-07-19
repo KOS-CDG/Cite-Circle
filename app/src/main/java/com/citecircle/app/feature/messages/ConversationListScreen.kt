@@ -33,6 +33,11 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 // ──────────────────────────────────────────────────────────────────────────────
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.asStateFlow
+
+// ──────────────────────────────────────────────────────────────────────────────
 // MessagesViewModel
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -43,6 +48,17 @@ class MessagesViewModel @Inject constructor(
 
     val conversations: StateFlow<List<Conversation>> = messageRepository.getConversations()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing = _isRefreshing.asStateFlow()
+
+    fun refreshConversations() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            delay(800)
+            _isRefreshing.value = false
+        }
+    }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -58,6 +74,7 @@ fun ConversationListScreen(
     viewModel: MessagesViewModel = hiltViewModel()
 ) {
     val conversations by viewModel.conversations.collectAsState()
+    val isRefreshing by viewModel.isRefreshing.collectAsState()
 
     Scaffold(
         topBar = {
@@ -85,7 +102,9 @@ fun ConversationListScreen(
             }
         }
     ) { paddingValues ->
-        Box(
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = { viewModel.refreshConversations() },
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.ccColors.paperCream)

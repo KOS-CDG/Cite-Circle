@@ -42,9 +42,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+// ──────────────────────────────────────────────────────────────────────────────
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.asStateFlow
 
 // ──────────────────────────────────────────────────────────────────────────────
 // ProfileViewModel
@@ -59,6 +65,9 @@ class ProfileViewModel @Inject constructor(
 
     private val _user = userRepository.getCurrentUser()
 
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing = _isRefreshing.asStateFlow()
+
     val papers = _user.combine(paperRepository.getAllPapers()) { user, allPapers ->
         allPapers.filter { paper -> paper.authors.any { it.id == user.id } }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -70,10 +79,19 @@ class ProfileViewModel @Inject constructor(
         ProfileState.Success(user, papers, circles)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ProfileState.Loading)
 
+    fun refreshProfile() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            delay(800)
+            _isRefreshing.value = false
+        }
+    }
+
     fun updateCoverPhoto(coverUrl: String) {
         viewModelScope.launch {
-            val current = (_user as? MutableStateFlow)?.value ?: return@launch
-            userRepository.updateCurrentUser(current.copy(coverUrl = coverUrl))
+            userRepository.getCurrentUser().firstOrNull()?.let { current ->
+                userRepository.updateCurrentUser(current.copy(coverUrl = coverUrl))
+            }
         }
     }
 }
@@ -87,6 +105,7 @@ sealed interface ProfileState {
 // ProfileScreen Composable (Current User)
 // ──────────────────────────────────────────────────────────────────────────────
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
     onEditProfile: () -> Unit,
@@ -96,9 +115,12 @@ fun ProfileScreen(
     viewModel: ProfileViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
+    val isRefreshing by viewModel.isRefreshing.collectAsState()
     var selectedTab by remember { mutableStateOf(0) }
 
-    Box(
+    PullToRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = { viewModel.refreshProfile() },
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.ccColors.paperCream)

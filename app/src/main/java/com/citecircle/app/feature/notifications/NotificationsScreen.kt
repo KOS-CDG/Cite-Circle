@@ -28,6 +28,7 @@ import com.citecircle.app.core.data.NotificationRepository
 import com.citecircle.app.core.designsystem.*
 import com.citecircle.app.core.model.NotifType
 import com.citecircle.app.core.model.Notification
+import com.citecircle.app.core.model.User
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -42,7 +43,9 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
-import com.citecircle.app.core.model.User
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.asStateFlow
 
 // ──────────────────────────────────────────────────────────────────────────────
 // NotificationsViewModel
@@ -55,6 +58,17 @@ class NotificationsViewModel @Inject constructor(
 
     val notifications: StateFlow<List<Notification>> = notificationRepository.getNotifications()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing = _isRefreshing.asStateFlow()
+
+    fun refreshNotifications() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            delay(800)
+            _isRefreshing.value = false
+        }
+    }
 
     fun markAllRead() {
         viewModelScope.launch {
@@ -140,6 +154,7 @@ fun NotificationsScreen(
     viewModel: NotificationsViewModel = hiltViewModel()
 ) {
     val notifications by viewModel.notifications.collectAsState()
+    val isRefreshing by viewModel.isRefreshing.collectAsState()
     var expandedGroups by remember { mutableStateOf(setOf<String>()) }
 
     Scaffold(
@@ -160,7 +175,9 @@ fun NotificationsScreen(
             )
         }
     ) { paddingValues ->
-        Box(
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = { viewModel.refreshNotifications() },
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.ccColors.paperCream)

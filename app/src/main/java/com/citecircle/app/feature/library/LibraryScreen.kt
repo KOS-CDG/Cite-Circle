@@ -37,6 +37,12 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 // ──────────────────────────────────────────────────────────────────────────────
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
+// ──────────────────────────────────────────────────────────────────────────────
 // LibraryViewModel
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -50,6 +56,17 @@ class LibraryViewModel @Inject constructor(
 
     val shelves: StateFlow<List<Shelf>> = paperRepository.getShelves()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing = _isRefreshing.asStateFlow()
+
+    fun refreshLibrary() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            delay(800)
+            _isRefreshing.value = false
+        }
+    }
 
     fun createShelf(name: String, description: String) {
         viewModelScope.launch {
@@ -83,6 +100,7 @@ fun LibraryScreen(
 ) {
     val savedPapers by viewModel.savedPapers.collectAsState()
     val shelves by viewModel.shelves.collectAsState()
+    val isRefreshing by viewModel.isRefreshing.collectAsState()
 
     var selectedTab by remember { mutableStateOf(0) }
     var searchQuery by remember { mutableStateOf("") }
@@ -133,7 +151,9 @@ fun LibraryScreen(
             }
         }
     ) { paddingValues ->
-        Box(
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = { viewModel.refreshLibrary() },
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.ccColors.paperCream)

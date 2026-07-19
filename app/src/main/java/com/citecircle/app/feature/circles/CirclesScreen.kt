@@ -224,16 +224,22 @@ fun CirclesScreen(
                     onAction = { selectedTab = 0 }
                 )
             } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                PullToRefreshBox(
+                    isRefreshing = isRefreshing,
+                    onRefresh = { viewModel.refreshCircles() },
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    items(joinedCircles, key = { it.id }) { circle ->
-                        JoinedCircleItem(
-                            circle = circle,
-                            onClick = { onCircleClick(circle.id) }
-                        )
+                    LazyColumn(
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(joinedCircles, key = { it.id }) { circle ->
+                            JoinedCircleItem(
+                                circle = circle,
+                                onClick = { onCircleClick(circle.id) }
+                            )
+                        }
                     }
                 }
             }

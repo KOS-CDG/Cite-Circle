@@ -48,6 +48,10 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.asStateFlow
+
 // ──────────────────────────────────────────────────────────────────────────────
 // CircleDetailViewModel
 // ──────────────────────────────────────────────────────────────────────────────
@@ -65,6 +69,9 @@ class CircleDetailViewModel @Inject constructor(
     private val _posts = MutableStateFlow<List<Post>>(emptyList())
     private val _papers = MutableStateFlow<List<Paper>>(emptyList())
     private val _members = MutableStateFlow<List<User>>(emptyList())
+
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing = _isRefreshing.asStateFlow()
 
     val state: StateFlow<CircleDetailState> = combine(_circle, _posts, _papers, _members) { circle, posts, papers, members ->
         if (circle == null) CircleDetailState.Loading
@@ -84,6 +91,15 @@ class CircleDetailViewModel @Inject constructor(
         }
         viewModelScope.launch {
             userRepository.getAllUsers().collect { _members.value = it.take(8) } // Fake member list
+        }
+    }
+
+    fun refreshCircleData() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            loadCircleData(_circleId.value)
+            delay(800)
+            _isRefreshing.value = false
         }
     }
 
@@ -143,6 +159,7 @@ fun CircleDetailScreen(
     }
 
     val state by viewModel.state.collectAsState()
+    val isRefreshing by viewModel.isRefreshing.collectAsState()
     var selectedTabIndex by remember { mutableStateOf(0) }
     var showPostComposer by remember { mutableStateOf(false) }
 
@@ -158,7 +175,9 @@ fun CircleDetailScreen(
             }
         }
     ) { paddingValues ->
-        Box(
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = { viewModel.refreshCircleData() },
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.ccColors.paperCream)

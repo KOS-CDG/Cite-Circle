@@ -36,6 +36,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import kotlinx.coroutines.delay
+
 // ──────────────────────────────────────────────────────────────────────────────
 // SearchViewModel
 // ──────────────────────────────────────────────────────────────────────────────
@@ -51,6 +54,9 @@ class SearchViewModel @Inject constructor(
     private val _searchResults = MutableStateFlow(SearchResults())
     val searchResults = _searchResults.asStateFlow()
 
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing = _isRefreshing.asStateFlow()
+
     val recentSearches = searchRepository.getRecentSearches()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -58,6 +64,15 @@ class SearchViewModel @Inject constructor(
         _searchQuery.value = query
         viewModelScope.launch {
             _searchResults.value = searchRepository.search(query)
+        }
+    }
+
+    fun refreshSearch() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            _searchResults.value = searchRepository.search(_searchQuery.value)
+            delay(800)
+            _isRefreshing.value = false
         }
     }
 
@@ -91,6 +106,7 @@ fun SearchScreen(
     val query by viewModel.searchQuery.collectAsState()
     val results by viewModel.searchResults.collectAsState()
     val recentSearches by viewModel.recentSearches.collectAsState()
+    val isRefreshing by viewModel.isRefreshing.collectAsState()
     var selectedTab by remember { mutableStateOf(0) }
 
     Scaffold(
@@ -111,52 +127,56 @@ fun SearchScreen(
             )
         }
     ) { paddingValues ->
-        Column(
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = { viewModel.refreshSearch() },
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.ccColors.paperCream)
                 .padding(paddingValues)
         ) {
-            if (query.isBlank()) {
-                // Recent searches chip rows
-                RecentSearchesSection(
-                    recentSearches = recentSearches,
-                    onSearchSelect = { viewModel.updateQuery(it) },
-                    onRemove = { viewModel.removeRecentSearch(it) }
-                )
-            } else {
-                // Result tabs
-                CcTabRow(
-                    tabs = listOf("All", "People", "Papers", "Circles", "Posts"),
-                    selectedIndex = selectedTab,
-                    onTabSelected = { selectedTab = it },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Box(modifier = Modifier.weight(1f)) {
-                    SearchResultsTabContent(
-                        tabIndex = selectedTab,
-                        query = query,
-                        results = results,
-                        onUserClick = {
-                            viewModel.addRecentSearch(query)
-                            onUserClick(it)
-                        },
-                        onPaperClick = {
-                            viewModel.addRecentSearch(query)
-                            onPaperClick(it)
-                        },
-                        onCircleClick = {
-                            viewModel.addRecentSearch(query)
-                            onCircleClick(it)
-                        },
-                        onPostClick = {
-                            viewModel.addRecentSearch(query)
-                            onPostClick(it)
-                        }
+            Column(modifier = Modifier.fillMaxSize()) {
+                if (query.isBlank()) {
+                    // Recent searches chip rows
+                    RecentSearchesSection(
+                        recentSearches = recentSearches,
+                        onSearchSelect = { viewModel.updateQuery(it) },
+                        onRemove = { viewModel.removeRecentSearch(it) }
                     )
+                } else {
+                    // Result tabs
+                    CcTabRow(
+                        tabs = listOf("All", "People", "Papers", "Circles", "Posts"),
+                        selectedIndex = selectedTab,
+                        onTabSelected = { selectedTab = it },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Box(modifier = Modifier.weight(1f)) {
+                        SearchResultsTabContent(
+                            tabIndex = selectedTab,
+                            query = query,
+                            results = results,
+                            onUserClick = {
+                                viewModel.addRecentSearch(query)
+                                onUserClick(it)
+                            },
+                            onPaperClick = {
+                                viewModel.addRecentSearch(query)
+                                onPaperClick(it)
+                            },
+                            onCircleClick = {
+                                viewModel.addRecentSearch(query)
+                                onCircleClick(it)
+                            },
+                            onPostClick = {
+                                viewModel.addRecentSearch(query)
+                                onPostClick(it)
+                            }
+                        )
+                    }
                 }
             }
         }
