@@ -365,7 +365,7 @@ fun ChatScreen(
                     val listState = rememberLazyListState()
                     val isAiThinking = chatState.recipient.id == "ai_copilot" &&
                             chatState.messages.isNotEmpty() &&
-                            chatState.messages.last().senderId == "u0"
+                            chatState.messages.last().senderId != "ai_copilot"
 
                     // Auto scroll to latest message or typing indicator
                     LaunchedEffect(chatState.messages.size, isAiThinking) {
@@ -382,7 +382,8 @@ fun ChatScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         items(chatState.messages, key = { it.id }) { msg ->
-                            MessageBubble(message = msg, isMine = msg.senderId == "u0")
+                            val isMine = msg.senderId != "ai_copilot" && msg.senderId != chatState.recipient.id
+                            MessageBubble(message = msg, isMine = isMine)
                         }
 
                         if (isAiThinking) {
@@ -531,9 +532,10 @@ fun TypingIndicatorBubble() {
         }
         Spacer(modifier = Modifier.width(8.dp))
         Text(
-            text = "AI is thinking...",
+            text = "AI Copilot is analyzing & prepping response...",
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.ccColors.marginGray
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.primary
         )
     }
 }

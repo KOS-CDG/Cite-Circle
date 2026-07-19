@@ -126,8 +126,8 @@ object DataModule {
 // ──────────────────────────────────────────────────────────────────────────────
 
 class RateLimitInterceptor(
-    private val requestsPerMinute: Int = 15,
-    private val minIntervalMs: Long = 2000L
+    private val requestsPerMinute: Int = 60,
+    private val minIntervalMs: Long = 50L
 ) : Interceptor {
     private val lock = Any()
     private var lastRequestTime = 0L
@@ -191,9 +191,9 @@ object NetworkModule {
 
     @Provides @Singleton @FireworksClient
     fun provideFireworksOkHttpClient(): OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(90, TimeUnit.SECONDS)
-        .addInterceptor(RateLimitInterceptor(requestsPerMinute = 15, minIntervalMs = 2000L))
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .addInterceptor(RateLimitInterceptor(requestsPerMinute = 60, minIntervalMs = 50L))
         .addInterceptor { chain ->
             chain.proceed(
                 chain.request().newBuilder()
