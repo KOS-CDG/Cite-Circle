@@ -444,52 +444,36 @@ class RealPaperRepository @Inject constructor(
     }
 
     override suspend fun publishPaper(draft: PaperDraft): Paper {
-        return try {
-            val uri = draft.pdfUri ?: throw Exception("No file URI provided")
-            val contentResolver = context.contentResolver
-            
-            // Read file bytes from Uri
-            val inputStream = contentResolver.openInputStream(uri) ?: throw Exception("Failed to open file URI")
-            val bytes = inputStream.use { it.readBytes() }
-            
-            // Determine MIME type
-            val mimeType = contentResolver.getType(uri) ?: "application/octet-stream"
-            
-            val requestFile = bytes.toRequestBody(mimeType.toMediaTypeOrNull())
-            val filePart = MultipartBody.Part.createFormData(
-                "file",
-                draft.pdfFileName ?: "manuscript.pdf",
-                requestFile
-            )
-            
-            val titlePart = draft.title.toRequestBody("text/plain".toMediaTypeOrNull())
-            val abstractPart = draft.abstract.toRequestBody("text/plain".toMediaTypeOrNull())
-            val yearPart = "2024".toRequestBody("text/plain".toMediaTypeOrNull())
-            val doiPart = "".toRequestBody("text/plain".toMediaTypeOrNull())
-            val journalPart = "".toRequestBody("text/plain".toMediaTypeOrNull())
-            
-            val response = api.publishPaper(
-                file = filePart,
-                title = titlePart,
-                abstract = abstractPart,
-                year = yearPart,
-                doi = doiPart,
-                journal = journalPart,
-                circleId = null
-            )
-            response.paper.toDomain()
-        } catch (e: Exception) {
-            e.printStackTrace()
-            // Fallback to local fake paper if API fails (offline/demo mode)
-            Paper(
-                id = "p${System.currentTimeMillis()}",
-                title = draft.title,
-                authors = draft.coAuthors,
-                abstract = draft.abstract,
-                year = 2024,
-                isPublished = true,
-            )
-        }
+        val uri = draft.pdfUri ?: throw IllegalStateException("No manuscript file was selected")
+        val contentResolver = context.contentResolver
+
+        val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            ?: throw IllegalStateException("Couldn't read the selected file")
+        val mimeType = contentResolver.getType(uri) ?: "application/octet-stream"
+
+        val requestFile = bytes.toRequestBody(mimeType.toMediaTypeOrNull())
+        val filePart = MultipartBody.Part.createFormData(
+            "file",
+            draft.pdfFileName ?: "manuscript.pdf",
+            requestFile
+        )
+
+        val titlePart = draft.title.toRequestBody("text/plain".toMediaTypeOrNull())
+        val abstractPart = draft.abstract.toRequestBody("text/plain".toMediaTypeOrNull())
+        val yearPart = "2024".toRequestBody("text/plain".toMediaTypeOrNull())
+        val doiPart = "".toRequestBody("text/plain".toMediaTypeOrNull())
+        val journalPart = "".toRequestBody("text/plain".toMediaTypeOrNull())
+
+        val response = api.publishPaper(
+            file = filePart,
+            title = titlePart,
+            abstract = abstractPart,
+            year = yearPart,
+            doi = doiPart,
+            journal = journalPart,
+            circleId = null
+        )
+        return response.paper.toDomain()
     }
 
     override suspend fun getPaperSummary(paperId: String, title: String, abstract: String): String {

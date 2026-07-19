@@ -171,24 +171,18 @@ val trendingTopics = listOf(
     "Topology"
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FeedScreen(
-    onPostClick: (String) -> Unit,
-    onPaperClick: (String) -> Unit,
-    onUserClick: (String) -> Unit,
-    onCircleClick: (String) -> Unit,
-    onComposePost: () -> Unit = {},
-    viewModel: FeedViewModel = hiltViewModel()
+fun FeedHeaderContent(
+    selectedFilter: String,
+    selectedTopic: String,
+    onFilterSelected: (String) -> Unit,
+    onTopicSelected: (String) -> Unit,
+    currentUser: User?,
+    onComposePost: () -> Unit
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val selectedFilter by viewModel.selectedFilter.collectAsState()
-    val isRefreshing by viewModel.isRefreshing.collectAsState()
-    val currentUser by viewModel.currentUser.collectAsState()
-
     Column(
         modifier = Modifier
-            .fillMaxSize()
+            .fillMaxWidth()
             .background(MaterialTheme.ccColors.paperCream)
     ) {
         // Horizontal filter row
@@ -203,13 +197,12 @@ fun FeedScreen(
                 CcChip(
                     label = filter,
                     selected = selectedFilter == filter,
-                    onClick = { viewModel.setFilter(filter) }
+                    onClick = { onFilterSelected(filter) }
                 )
             }
         }
 
         // Horizontally scrollable topics chip row
-        val selectedTopic by viewModel.selectedTopic.collectAsState()
         LazyRow(
             modifier = Modifier
                 .fillMaxWidth()
@@ -238,7 +231,7 @@ fun FeedScreen(
                         .clip(RoundedCornerShape(20.dp))
                         .background(backgroundTransition)
                         .border(1.dp, borderTransition, RoundedCornerShape(20.dp))
-                        .clickable { viewModel.setTopic(topic) }
+                        .clickable { onTopicSelected(topic) }
                         .padding(horizontal = 14.dp, vertical = 6.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -269,57 +262,134 @@ fun FeedScreen(
         )
 
         HorizontalDivider(color = MaterialTheme.ccColors.divider)
+    }
+}
 
-        // Pull to refresh simulation / Feed content
-        PullToRefreshBox(
-            isRefreshing = isRefreshing,
-            onRefresh = { viewModel.refreshFeed() },
-            modifier = Modifier.weight(1f).fillMaxWidth()
-        ) {
-            when (val state = uiState) {
-                is FeedUiState.Loading -> {
-                    LazyColumn(contentPadding = PaddingValues(vertical = 12.dp)) {
-                        items(3) {
-                            CcPostShimmer()
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun FeedScreen(
+    onPostClick: (String) -> Unit,
+    onPaperClick: (String) -> Unit,
+    onUserClick: (String) -> Unit,
+    onCircleClick: (String) -> Unit,
+    onComposePost: () -> Unit = {},
+    viewModel: FeedViewModel = hiltViewModel()
+) {
+    val uiState by viewModel.uiState.collectAsState()
+    val selectedFilter by viewModel.selectedFilter.collectAsState()
+    val selectedTopic by viewModel.selectedTopic.collectAsState()
+    val isRefreshing by viewModel.isRefreshing.collectAsState()
+    val currentUser by viewModel.currentUser.collectAsState()
+
+    PullToRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = { viewModel.refreshFeed() },
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.ccColors.paperCream)
+    ) {
+        when (val state = uiState) {
+            is FeedUiState.Loading -> {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 12.dp)
+                ) {
+                    item {
+                        FeedHeaderContent(
+                            selectedFilter = selectedFilter,
+                            selectedTopic = selectedTopic,
+                            onFilterSelected = { viewModel.setFilter(it) },
+                            onTopicSelected = { viewModel.setTopic(it) },
+                            currentUser = currentUser,
+                            onComposePost = onComposePost
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+                    items(3) {
+                        CcPostShimmer()
+                        Spacer(modifier = Modifier.height(8.dp))
                     }
                 }
-                is FeedUiState.Success -> {
-                    LazyColumn(
-                        contentPadding = PaddingValues(vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        items(state.posts, key = { it.id }) { post ->
-                            PostCard(
-                                post = post,
-                                onPostClick = onPostClick,
-                                onUserClick = onUserClick,
-                                onCircleClick = onCircleClick,
-                                onEndorse = { viewModel.endorsePost(it) },
-                                onSave = { viewModel.savePost(it) },
-                                modifier = Modifier.padding(horizontal = 16.dp)
-                            )
-                        }
+            }
+            is FeedUiState.Success -> {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    item {
+                        FeedHeaderContent(
+                            selectedFilter = selectedFilter,
+                            selectedTopic = selectedTopic,
+                            onFilterSelected = { viewModel.setFilter(it) },
+                            onTopicSelected = { viewModel.setTopic(it) },
+                            currentUser = currentUser,
+                            onComposePost = onComposePost
+                        )
+                    }
+                    items(state.posts, key = { it.id }) { post ->
+                        PostCard(
+                            post = post,
+                            onPostClick = onPostClick,
+                            onUserClick = onUserClick,
+                            onCircleClick = onCircleClick,
+                            onEndorse = { viewModel.endorsePost(it) },
+                            onSave = { viewModel.savePost(it) },
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
                     }
                 }
-                is FeedUiState.Empty -> {
-                    CcEmptyState(
-                        emoji = "📭",
-                        title = "No posts found",
-                        subtitle = "Try altering your filters or follow more researchers to populate your feed.",
-                        actionLabel = "Refresh Feed",
-                        onAction = { viewModel.refreshFeed() }
-                    )
+            }
+            is FeedUiState.Empty -> {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 12.dp)
+                ) {
+                    item {
+                        FeedHeaderContent(
+                            selectedFilter = selectedFilter,
+                            selectedTopic = selectedTopic,
+                            onFilterSelected = { viewModel.setFilter(it) },
+                            onTopicSelected = { viewModel.setTopic(it) },
+                            currentUser = currentUser,
+                            onComposePost = onComposePost
+                        )
+                    }
+                    item {
+                        CcEmptyState(
+                            emoji = "📭",
+                            title = "No posts found",
+                            subtitle = "Try altering your filters or follow more researchers to populate your feed.",
+                            actionLabel = "Refresh Feed",
+                            onAction = { viewModel.refreshFeed() }
+                        )
+                    }
                 }
-                is FeedUiState.Error -> {
-                    CcEmptyState(
-                        emoji = "⚠️",
-                        title = "Something went wrong",
-                        subtitle = state.message,
-                        actionLabel = "Retry",
-                        onAction = { viewModel.refreshFeed() }
-                    )
+            }
+            is FeedUiState.Error -> {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 12.dp)
+                ) {
+                    item {
+                        FeedHeaderContent(
+                            selectedFilter = selectedFilter,
+                            selectedTopic = selectedTopic,
+                            onFilterSelected = { viewModel.setFilter(it) },
+                            onTopicSelected = { viewModel.setTopic(it) },
+                            currentUser = currentUser,
+                            onComposePost = onComposePost
+                        )
+                    }
+                    item {
+                        CcEmptyState(
+                            emoji = "⚠️",
+                            title = "Something went wrong",
+                            subtitle = state.message,
+                            actionLabel = "Retry",
+                            onAction = { viewModel.refreshFeed() }
+                        )
+                    }
                 }
             }
         }

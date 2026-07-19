@@ -39,6 +39,7 @@ import com.citecircle.app.core.data.AiReviewRepository
 import com.citecircle.app.core.data.AiReviewStage
 import com.citecircle.app.core.data.FakeDataSource
 import com.citecircle.app.core.data.PaperRepository
+import com.citecircle.app.core.data.UserRepository
 import com.citecircle.app.core.designsystem.*
 import com.citecircle.app.core.model.*
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -56,7 +57,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 @HiltViewModel
 class PublishViewModel @Inject constructor(
     private val aiReviewRepository: AiReviewRepository,
-    private val paperRepository: PaperRepository
+    private val paperRepository: PaperRepository,
+    private val userRepository: UserRepository,
 ) : ViewModel() {
 
     private val _currentStep = MutableStateFlow(1)
@@ -70,6 +72,14 @@ class PublishViewModel @Inject constructor(
 
     private val _reviewProgress = MutableStateFlow<AiReviewStage>(AiReviewStage.Idle)
     val reviewProgress = _reviewProgress.asStateFlow()
+
+    private val _isPublishing = MutableStateFlow(false)
+    val isPublishing = _isPublishing.asStateFlow()
+
+    private val _publishError = MutableStateFlow<String?>(null)
+    val publishError = _publishError.asStateFlow()
+
+    val currentUser = userRepository.getCurrentUser()
 
     fun setStep(step: Int) {
         _currentStep.value = step
@@ -103,9 +113,18 @@ class PublishViewModel @Inject constructor(
     }
 
     fun publishPaper(onSuccess: () -> Unit) {
+        if (_isPublishing.value) return
         viewModelScope.launch {
-            paperRepository.publishPaper(_draft.value)
-            onSuccess()
+            _isPublishing.value = true
+            _publishError.value = null
+            try {
+                paperRepository.publishPaper(_draft.value)
+                onSuccess()
+            } catch (e: Exception) {
+                _publishError.value = e.message ?: "Couldn't publish your manuscript. Please try again."
+            } finally {
+                _isPublishing.value = false
+            }
         }
     }
 }
@@ -125,6 +144,9 @@ fun PublishFlowScreen(
     val draft by viewModel.draft.collectAsState()
     val report by viewModel.reviewReport.collectAsState()
     val progress by viewModel.reviewProgress.collectAsState()
+    val isPublishing by viewModel.isPublishing.collectAsState()
+    val publishError by viewModel.publishError.collectAsState()
+    val currentUser by viewModel.currentUser.collectAsState(initial = null)
 
     Scaffold(
         topBar = {
@@ -174,6 +196,8 @@ fun PublishFlowScreen(
                     3 -> Step3AiReview(
                         progress = progress,
                         report = report,
+                        isPublishing = isPublishing,
+                        publishError = publishError,
                         onBackToEdit = { viewModel.setStep(2) },
                         onRetry = { viewModel.runAiReview {} },
                         onPublish = {
@@ -184,6 +208,7 @@ fun PublishFlowScreen(
                     )
                     4 -> Step4Success(
                         draft = draft,
+                        authorName = currentUser?.name ?: FakeDataSource.currentUser.name,
                         onDone = onDismiss
                     )
                 }
@@ -454,6 +479,8 @@ fun Step2Details(
 fun Step3AiReview(
     progress: AiReviewStage,
     report: AiReviewReport?,
+    isPublishing: Boolean = false,
+    publishError: String? = null,
     onBackToEdit: () -> Unit,
     onPublish: () -> Unit,
     onRetry: () -> Unit = {}
@@ -548,19 +575,49 @@ fun Step3AiReview(
                             }
                         }
 
+                        if (publishError != null) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Filled.Warning, contentDescription = "Publish error", tint = MaterialTheme.colorScheme.onErrorContainer)
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(
+                                        text = "Publishing failed: $publishError",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                }
+                            }
+                        }
+
                         Spacer(modifier = Modifier.height(32.dp))
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            CcSecondaryButton(text = "Revise Draft", onClick = onBackToEdit, modifier = Modifier.weight(1f).padding(end = 12.dp))
+                            CcSecondaryButton(
+                                text = "Revise Draft",
+                                onClick = onBackToEdit,
+                                enabled = !isPublishing,
+                                modifier = Modifier.weight(1f).padding(end = 12.dp)
+                            )
                             CcPrimaryButton(
                                 text = "Publish anyway",
                                 onClick = {
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     onPublish()
                                 },
+                                enabled = !isPublishing,
+                                isLoading = isPublishing,
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -796,6 +853,7 @@ fun SuggestionRowItem(suggestion: AiSuggestion) {
 @Composable
 fun Step4Success(
     draft: PaperDraft,
+    authorName: String,
     onDone: () -> Unit
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
@@ -844,7 +902,7 @@ fun Step4Success(
             CcCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(text = draft.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(text = "By ${FakeDataSource.currentUser.name}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.ccColors.marginGray)
+                    Text(text = "By $authorName", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.ccColors.marginGray)
                 }
             }
 
