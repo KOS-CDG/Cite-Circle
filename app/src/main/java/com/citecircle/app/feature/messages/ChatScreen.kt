@@ -23,7 +23,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -44,6 +49,93 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Markdown Text Parser
+// ──────────────────────────────────────────────────────────────────────────────
+
+fun parseMarkdownToAnnotatedString(text: String): AnnotatedString {
+    var cleanText = text.trim()
+    if (cleanText.startsWith("```markdown")) {
+        cleanText = cleanText.removeSurrounding("```markdown", "```").trim()
+    } else if (cleanText.startsWith("```text")) {
+        cleanText = cleanText.removeSurrounding("```text", "```").trim()
+    } else if (cleanText.startsWith("```") && cleanText.endsWith("```")) {
+        cleanText = cleanText.removeSurrounding("```", "```").trim()
+    }
+
+    // Convert bullet symbols '* ' or '- ' at line starts into clean bullet point '• '
+    val processedLines = cleanText.lines().joinToString("\n") { line ->
+        val trimmed = line.trimStart()
+        if (trimmed.startsWith("* ") || trimmed.startsWith("- ")) {
+            "•  " + trimmed.substring(2)
+        } else {
+            line
+        }
+    }
+
+    return buildAnnotatedString {
+        var currentIndex = 0
+        val length = processedLines.length
+        val regex = Regex("""(\*\*|__)(.*?)\1|(\*|_)(.*?)\3|`([^`]+)`""")
+        val matches = regex.findAll(processedLines)
+
+        for (match in matches) {
+            val range = match.range
+            if (range.first > currentIndex) {
+                append(processedLines.substring(currentIndex, range.first))
+            }
+
+            val boldContent = match.groupValues[2].takeIf { it.isNotEmpty() }
+            val italicContent = match.groupValues[4].takeIf { it.isNotEmpty() }
+            val codeContent = match.groupValues[5].takeIf { it.isNotEmpty() }
+
+            when {
+                boldContent != null -> {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                        append(boldContent)
+                    }
+                }
+                italicContent != null -> {
+                    withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
+                        append(italicContent)
+                    }
+                }
+                codeContent != null -> {
+                    withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, background = Color.Black.copy(alpha = 0.08f))) {
+                        append(" $codeContent ")
+                    }
+                }
+                else -> {
+                    append(match.value)
+                }
+            }
+            currentIndex = range.last + 1
+        }
+
+        if (currentIndex < length) {
+            append(processedLines.substring(currentIndex))
+        }
+    }
+}
+
+@Composable
+fun FormattedChatMessageText(
+    text: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    val annotatedString = remember(text) {
+        parseMarkdownToAnnotatedString(text)
+    }
+    Text(
+        text = annotatedString,
+        color = color,
+        style = MaterialTheme.typography.bodyMedium,
+        lineHeight = 22.sp,
+        modifier = modifier
+    )
+}
 
 // ──────────────────────────────────────────────────────────────────────────────
 // ChatViewModel
@@ -353,10 +445,9 @@ fun MessageBubble(
                         }
                     }
 
-                    Text(
+                    FormattedChatMessageText(
                         text = message.content,
-                        color = textColor,
-                        style = MaterialTheme.typography.bodyMedium
+                        color = textColor
                     )
 
                     if (message.attachedPaper != null) {

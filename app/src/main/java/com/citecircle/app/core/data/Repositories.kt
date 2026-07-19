@@ -365,10 +365,11 @@ class FakeMessageRepository @Inject constructor(
                 Your job is to assist with research, literature reviews, methodology, statistics, paper writing, and academic publishing.
                 
                 Guidelines:
-                1. Respond directly, clearly, and concisely to the user's prompt.
-                2. Do not output meta-reasoning, step-by-step thinking, or internal analysis.
-                3. Use markdown elements (bullet points, bold text, numbered lists) to make responses easy to read.
-                4. Keep answers focused, encouraging, and academically rigorous.
+                1. Respond in clear, elegant, readable conversational prose.
+                2. DO NOT wrap your response in markdown code blocks like ``` or ```text unless specifically asked for code.
+                3. Do not output meta-reasoning, step-by-step thinking, or internal analysis.
+                4. Use bold text and bullet points naturally for readability.
+                5. Keep answers focused, encouraging, and academically rigorous.
             """.trimIndent()
 
             val history = flow.value.takeLast(10).map { msg ->
@@ -391,6 +392,8 @@ class FakeMessageRepository @Inject constructor(
             replyText = replyText.trim()
             if (replyText.startsWith("```markdown")) {
                 replyText = replyText.removeSurrounding("```markdown", "```").trim()
+            } else if (replyText.startsWith("```text")) {
+                replyText = replyText.removeSurrounding("```text", "```").trim()
             } else if (replyText.startsWith("```")) {
                 replyText = replyText.removeSurrounding("```", "```").trim()
             }
