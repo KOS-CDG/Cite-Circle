@@ -101,6 +101,14 @@ interface AuthRepository {
     suspend fun login(email: String, password: String): Boolean
     suspend fun signup(email: String, password: String, role: UserRole): Boolean
     suspend fun logout()
+    suspend fun changePassword(oldPassword: String, newPassword: String): Result<Unit>
+    suspend fun changeEmail(newEmail: String, currentPassword: String): Result<Unit>
+    fun getSavedAccounts(): Flow<List<SavedAccount>>
+    suspend fun switchAccount(userId: String): Boolean
+    suspend fun addAccount(email: String, password: String): Result<Boolean>
+    suspend fun removeAccount(userId: String): Boolean
+    suspend fun clearCache(): Boolean
+    suspend fun logoutAll()
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -686,7 +694,27 @@ class FakeSearchRepository @Inject constructor() : SearchRepository {
 class FakeAuthRepository @Inject constructor(
     private val userRepository: UserRepository
 ) : AuthRepository {
-    private var _loggedIn = false
+    private var _loggedIn = true
+    private val _savedAccounts = MutableStateFlow<List<SavedAccount>>(
+        listOf(
+            SavedAccount(
+                userId = FakeDataSource.currentUser.id,
+                email = "user@citecircle.org",
+                name = FakeDataSource.currentUser.name,
+                avatarUrl = FakeDataSource.currentUser.avatarUrl,
+                role = FakeDataSource.currentUser.role.name,
+                isActive = true
+            ),
+            SavedAccount(
+                userId = FakeDataSource.dummyUser.id,
+                email = "researcher.dummy@stanford.edu",
+                name = FakeDataSource.dummyUser.name,
+                avatarUrl = FakeDataSource.dummyUser.avatarUrl,
+                role = FakeDataSource.dummyUser.role.name,
+                isActive = false
+            )
+        )
+    )
 
     override fun isLoggedIn(): Boolean = _loggedIn
 
@@ -699,6 +727,7 @@ class FakeAuthRepository @Inject constructor(
             else -> FakeDataSource.defaultUser
         }
         userRepository.updateCurrentUser(loggedInUser)
+        updateSavedAccountList(loggedInUser, email)
         return true
     }
 
@@ -715,10 +744,100 @@ class FakeAuthRepository @Inject constructor(
             interests = emptyList()
         )
         userRepository.updateCurrentUser(newUser)
+        updateSavedAccountList(newUser, email)
         return true
     }
 
     override suspend fun logout() {
         _loggedIn = false
+    }
+
+    override suspend fun changePassword(oldPassword: String, newPassword: String): Result<Unit> {
+        delay(600)
+        if (oldPassword.isBlank() || newPassword.length < 6) {
+            return Result.failure(Exception("New password must be at least 6 characters long."))
+        }
+        return Result.success(Unit)
+    }
+
+    override suspend fun changeEmail(newEmail: String, currentPassword: String): Result<Unit> {
+        delay(600)
+        if (!newEmail.contains("@") || currentPassword.isBlank()) {
+            return Result.failure(Exception("Please enter a valid email address and password."))
+        }
+        return Result.success(Unit)
+    }
+
+    override fun getSavedAccounts(): Flow<List<SavedAccount>> = _savedAccounts.asStateFlow()
+
+    override suspend fun switchAccount(userId: String): Boolean {
+        delay(500)
+        val current = _savedAccounts.value.toMutableList()
+        val targetIdx = current.indexOfFirst { it.userId == userId }
+        if (targetIdx < 0) return false
+
+        val updated = current.map { acc ->
+            acc.copy(isActive = (acc.userId == userId))
+        }
+        _savedAccounts.value = updated
+
+        val targetAccount = current[targetIdx]
+        val matchingUser = FakeDataSource.users.find { it.id == userId }
+            ?: User(id = targetAccount.userId, name = targetAccount.name, avatarUrl = targetAccount.avatarUrl)
+        userRepository.updateCurrentUser(matchingUser)
+        return true
+    }
+
+    override suspend fun addAccount(email: String, password: String): Result<Boolean> {
+        delay(800)
+        if (!email.contains("@") || password.length < 4) {
+            return Result.failure(Exception("Invalid credentials provided for secondary account."))
+        }
+        val nameFromEmail = email.substringBefore("@").split(".").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+        val newUser = User(
+            id = "u_${System.currentTimeMillis()}",
+            name = nameFromEmail,
+            avatarUrl = "https://api.dicebear.com/8.x/avataaars/svg?seed=$nameFromEmail",
+            role = UserRole.RESEARCHER,
+            institution = "CiteCircle Network"
+        )
+        updateSavedAccountList(newUser, email)
+        userRepository.updateCurrentUser(newUser)
+        return Result.success(true)
+    }
+
+    override suspend fun removeAccount(userId: String): Boolean {
+        val current = _savedAccounts.value.filter { it.userId != userId }
+        _savedAccounts.value = current
+        return true
+    }
+
+    override suspend fun clearCache(): Boolean {
+        delay(500)
+        return true
+    }
+
+    override suspend fun logoutAll() {
+        _savedAccounts.value = emptyList()
+        _loggedIn = false
+    }
+
+    private fun updateSavedAccountList(user: User, email: String) {
+        val current = _savedAccounts.value.map { it.copy(isActive = false) }.toMutableList()
+        val existingIdx = current.indexOfFirst { it.userId == user.id }
+        val newAcc = SavedAccount(
+            userId = user.id,
+            email = email,
+            name = user.name,
+            avatarUrl = user.avatarUrl,
+            role = user.role.name,
+            isActive = true
+        )
+        if (existingIdx >= 0) {
+            current[existingIdx] = newAcc
+        } else {
+            current.add(0, newAcc)
+        }
+        _savedAccounts.value = current
     }
 }

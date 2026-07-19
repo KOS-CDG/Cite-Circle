@@ -205,6 +205,7 @@ fun CiteCircleNavHost(
             composable<ProfileRoute> {
                 ProfileScreen(
                     onEditProfile = { navController.navigate(EditProfileRoute) },
+                    onSettingsClick = { navController.navigate(SettingsRoute) },
                     onPaperClick = { paperId -> navController.navigate(PaperDetailRoute(paperId)) },
                     onCircleClick = { circleId -> navController.navigate(CircleDetailRoute(circleId)) }
                 )
@@ -296,6 +297,7 @@ fun CiteCircleNavHost(
             composable<SettingsRoute> {
                 SettingsScreen(
                     onBack = { navController.popBackStack() },
+                    onEditProfileClick = { navController.navigate(EditProfileRoute) },
                     isDarkTheme = isDarkTheme,
                     onThemeChange = onThemeChange,
                     onLogout = {

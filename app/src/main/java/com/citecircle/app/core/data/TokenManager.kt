@@ -30,6 +30,8 @@ class TokenManager @Inject constructor(
         private val KEY_SHELVES_JSON = stringPreferencesKey("shelves_json")
         private val KEY_JOINED_CIRCLES_JSON = stringPreferencesKey("joined_circles_json")
         private val KEY_PENDING_CONNECTIONS_JSON = stringPreferencesKey("pending_connections_json")
+        private val KEY_SAVED_ACCOUNTS_JSON = stringPreferencesKey("saved_accounts_json")
+        private val KEY_USER_EMAIL = stringPreferencesKey("user_email")
     }
 
     /** Persist tokens after login/signup. */
@@ -104,4 +106,18 @@ class TokenManager @Inject constructor(
 
     suspend fun getPendingConnectionsJson(): String? =
         context.tokenDataStore.data.map { it[KEY_PENDING_CONNECTIONS_JSON] }.first()
+
+    suspend fun saveSavedAccountsJson(json: String) {
+        context.tokenDataStore.edit { it[KEY_SAVED_ACCOUNTS_JSON] = json }
+    }
+
+    suspend fun getSavedAccountsJson(): String? =
+        context.tokenDataStore.data.map { it[KEY_SAVED_ACCOUNTS_JSON] }.first()
+
+    suspend fun saveUserEmail(email: String) {
+        context.tokenDataStore.edit { it[KEY_USER_EMAIL] = email }
+    }
+
+    suspend fun getUserEmail(): String? =
+        context.tokenDataStore.data.map { it[KEY_USER_EMAIL] }.first()
 }

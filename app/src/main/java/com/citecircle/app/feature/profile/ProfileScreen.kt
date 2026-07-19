@@ -8,6 +8,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -74,6 +76,7 @@ sealed interface ProfileState {
 @Composable
 fun ProfileScreen(
     onEditProfile: () -> Unit,
+    onSettingsClick: () -> Unit = {},
     onPaperClick: (String) -> Unit,
     onCircleClick: (String) -> Unit,
     viewModel: ProfileViewModel = hiltViewModel()
@@ -149,11 +152,23 @@ fun ProfileScreen(
                                         )
                                     }
 
-                                    CcSecondaryButton(
-                                        text = "Edit",
-                                        onClick = onEditProfile,
-                                        modifier = Modifier.height(36.dp)
-                                    )
+                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        CcSecondaryButton(
+                                            text = "Edit",
+                                            onClick = onEditProfile,
+                                            modifier = Modifier.height(36.dp)
+                                        )
+                                        IconButton(
+                                            onClick = onSettingsClick,
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Outlined.Settings,
+                                                contentDescription = "Settings",
+                                                tint = MaterialTheme.colorScheme.onBackground
+                                            )
+                                        }
+                                    }
                                 }
 
                                 Spacer(modifier = Modifier.height(12.dp))

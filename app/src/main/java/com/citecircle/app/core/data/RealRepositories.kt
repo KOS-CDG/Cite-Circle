@@ -116,17 +116,41 @@ class RealAuthRepository @Inject constructor(
     private val api: CiteCircleApi,
     private val tokenManager: TokenManager,
     private val userRepository: UserRepository,
+    private val json: Json,
 ) : AuthRepository {
 
-    override fun isLoggedIn(): Boolean = false // checked via suspend; see below
+    private val _savedAccounts = MutableStateFlow<List<SavedAccount>>(emptyList())
+
+    init {
+        CoroutineScope(Dispatchers.IO).launch {
+            tokenManager.getSavedAccountsJson()?.let { jsonStr ->
+                runCatching {
+                    val list = json.decodeFromString(ListSerializer(SavedAccount.serializer()), jsonStr)
+                    _savedAccounts.value = list
+                }
+            }
+        }
+    }
+
+    private fun persistAccounts(accounts: List<SavedAccount>) {
+        _savedAccounts.value = accounts
+        CoroutineScope(Dispatchers.IO).launch {
+            runCatching {
+                tokenManager.saveSavedAccountsJson(json.encodeToString(ListSerializer(SavedAccount.serializer()), accounts))
+            }
+        }
+    }
+
+    override fun isLoggedIn(): Boolean = runBlocking { tokenManager.isLoggedIn() }
 
     override suspend fun login(email: String, password: String): Boolean {
         return try {
             val resp = api.login(LoginRequestDto(email, password))
             tokenManager.saveTokens(resp.accessToken, resp.refreshToken, resp.userId)
-            // Fetch the full user profile and cache it
+            tokenManager.saveUserEmail(email)
             val me = api.getMe().toDomain()
             userRepository.updateCurrentUser(me)
+            addSavedAccountSession(me, email, resp.accessToken, resp.refreshToken)
             true
         } catch (e: Exception) {
             e.printStackTrace()
@@ -138,7 +162,9 @@ class RealAuthRepository @Inject constructor(
                 institution = "CiteCircle Affiliate"
             )
             tokenManager.saveTokens("demo_access_token", "demo_refresh_token", localUser.id)
+            tokenManager.saveUserEmail(email)
             userRepository.updateCurrentUser(localUser)
+            addSavedAccountSession(localUser, email, "demo_access_token", "demo_refresh_token")
             true
         }
     }
@@ -156,6 +182,7 @@ class RealAuthRepository @Inject constructor(
                 )
             )
             tokenManager.saveTokens(resp.accessToken, resp.refreshToken, resp.userId)
+            tokenManager.saveUserEmail(email)
             val me = try { api.getMe().toDomain() } catch (_: Exception) {
                 User(
                     id = resp.userId,
@@ -165,6 +192,7 @@ class RealAuthRepository @Inject constructor(
                 )
             }
             userRepository.updateCurrentUser(me)
+            addSavedAccountSession(me, email, resp.accessToken, resp.refreshToken)
             true
         } catch (e: Exception) {
             e.printStackTrace()
@@ -175,13 +203,113 @@ class RealAuthRepository @Inject constructor(
                 institution = "CiteCircle Affiliate"
             )
             tokenManager.saveTokens("demo_access_token", "demo_refresh_token", newUser.id)
+            tokenManager.saveUserEmail(email)
             userRepository.updateCurrentUser(newUser)
+            addSavedAccountSession(newUser, email, "demo_access_token", "demo_refresh_token")
             true
         }
     }
 
     override suspend fun logout() {
+        val currentUserId = tokenManager.getCurrentUserId()
+        if (currentUserId != null) {
+            val updated = _savedAccounts.value.filter { it.userId != currentUserId }
+            persistAccounts(updated)
+        }
         tokenManager.clearTokens()
+    }
+
+    override suspend fun changePassword(oldPassword: String, newPassword: String): Result<Unit> {
+        if (oldPassword.isBlank()) {
+            return Result.failure(Exception("Current password is required."))
+        }
+        if (newPassword.length < 6) {
+            return Result.failure(Exception("New password must be at least 6 characters long."))
+        }
+        delay(600)
+        return Result.success(Unit)
+    }
+
+    override suspend fun changeEmail(newEmail: String, currentPassword: String): Result<Unit> {
+        if (!newEmail.contains("@") || !newEmail.contains(".")) {
+            return Result.failure(Exception("Please enter a valid email address."))
+        }
+        if (currentPassword.isBlank()) {
+            return Result.failure(Exception("Current password is required to verify identity."))
+        }
+        delay(600)
+        tokenManager.saveUserEmail(newEmail)
+        return Result.success(Unit)
+    }
+
+    override fun getSavedAccounts(): Flow<List<SavedAccount>> = _savedAccounts.asStateFlow()
+
+    override suspend fun switchAccount(userId: String): Boolean {
+        val accounts = _savedAccounts.value
+        val target = accounts.find { it.userId == userId } ?: return false
+
+        tokenManager.saveTokens(target.accessToken, target.refreshToken, target.userId)
+        tokenManager.saveUserEmail(target.email)
+
+        val updated = accounts.map { acc ->
+            acc.copy(isActive = (acc.userId == userId))
+        }
+        persistAccounts(updated)
+
+        val switchedUser = User(
+            id = target.userId,
+            name = target.name,
+            avatarUrl = target.avatarUrl,
+            role = runCatching { UserRole.valueOf(target.role) }.getOrDefault(UserRole.STUDENT),
+            institution = "CiteCircle Network"
+        )
+        userRepository.updateCurrentUser(switchedUser)
+        return true
+    }
+
+    override suspend fun addAccount(email: String, password: String): Result<Boolean> {
+        if (!email.contains("@") || password.length < 4) {
+            return Result.failure(Exception("Please enter a valid email and password."))
+        }
+        val success = login(email, password)
+        return if (success) Result.success(true) else Result.failure(Exception("Authentication failed for $email"))
+    }
+
+    override suspend fun removeAccount(userId: String): Boolean {
+        val updated = _savedAccounts.value.filter { it.userId != userId }
+        persistAccounts(updated)
+        return true
+    }
+
+    override suspend fun clearCache(): Boolean {
+        delay(400)
+        return true
+    }
+
+    override suspend fun logoutAll() {
+        persistAccounts(emptyList())
+        tokenManager.clearTokens()
+    }
+
+    private fun addSavedAccountSession(user: User, email: String, access: String, refresh: String) {
+        val current = _savedAccounts.value.map { it.copy(isActive = false) }.toMutableList()
+        val existingIdx = current.indexOfFirst { it.userId == user.id }
+        val account = SavedAccount(
+            userId = user.id,
+            email = email,
+            name = user.name,
+            avatarUrl = user.avatarUrl,
+            role = user.role.name,
+            accessToken = access,
+            refreshToken = refresh,
+            isActive = true
+        )
+        if (existingIdx >= 0) {
+            current[existingIdx] = account
+        } else {
+            current.add(0, account)
+        }
+        persistAccounts(current)
     }
 }
 

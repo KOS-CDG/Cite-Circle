@@ -221,3 +221,20 @@ data class Shelf(
     val paperIds: List<String> = emptyList()
 )
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Saved Account Session (Multi-Account Support)
+// ──────────────────────────────────────────────────────────────────────────────
+
+@Serializable
+data class SavedAccount(
+    val userId: String,
+    val email: String,
+    val name: String,
+    val avatarUrl: String = "",
+    val role: String = "STUDENT",
+    val accessToken: String = "",
+    val refreshToken: String = "",
+    val isActive: Boolean = false
+)
+
+
