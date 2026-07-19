@@ -34,6 +34,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.PickVisualMediaRequest
 
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.shape.RoundedCornerShape
+import coil.compose.AsyncImage
+
 // ──────────────────────────────────────────────────────────────────────────────
 // EditProfileViewModel
 // ──────────────────────────────────────────────────────────────────────────────
@@ -104,6 +109,7 @@ fun EditProfileScreen(
                 var orcid by remember { mutableStateOf(user.orcidId) }
                 var fieldOfStudy by remember { mutableStateOf(user.fieldOfStudy) }
                 var avatarUrl by remember { mutableStateOf(user.avatarUrl) }
+                var coverUrl by remember { mutableStateOf(user.coverUrl) }
 
                 val pickMediaLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.PickVisualMedia()
@@ -113,12 +119,75 @@ fun EditProfileScreen(
                     }
                 }
 
+                val pickCoverLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.PickVisualMedia()
+                ) { uri ->
+                    if (uri != null) {
+                        coverUrl = uri.toString()
+                    }
+                }
+
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .verticalScroll(scrollState)
                         .padding(24.dp)
                 ) {
+                    // Cover Photo Preview Box
+                    Text(text = "Profile Cover Banner", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(130.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable {
+                                pickCoverLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            }
+                    ) {
+                        if (coverUrl.isNotBlank()) {
+                            AsyncImage(
+                                model = coverUrl,
+                                contentDescription = "Cover preview",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        brush = Brush.horizontalGradient(
+                                            colors = listOf(CcColors.InkNavy, CcColors.CircleBlue)
+                                        )
+                                    )
+                            )
+                        }
+                        Surface(
+                            color = Color.Black.copy(alpha = 0.6f),
+                            shape = CircleShape,
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .clip(CircleShape)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Filled.CameraAlt, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Change Cover Banner", color = Color.White, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // Avatar Photo Preview
+                    Text(text = "Profile Avatar", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
                     Box(
                         modifier = Modifier
                             .align(Alignment.CenterHorizontally)
@@ -130,7 +199,7 @@ fun EditProfileScreen(
                     ) {
                         CcAvatar(
                             user = user.copy(avatarUrl = avatarUrl),
-                            size = 80.dp,
+                            size = 84.dp,
                             showRing = true
                         )
                         Box(
@@ -211,7 +280,8 @@ fun EditProfileScreen(
                                 bio = bio,
                                 orcidId = orcid,
                                 fieldOfStudy = fieldOfStudy,
-                                avatarUrl = avatarUrl
+                                avatarUrl = avatarUrl,
+                                coverUrl = coverUrl
                             )
                             viewModel.saveProfile(updated, onBack)
                         },

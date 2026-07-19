@@ -30,6 +30,7 @@ private fun UserDto.toDomain() = User(
     id = id,
     name = name,
     avatarUrl = avatarUrl,
+    coverUrl = coverUrl,
     role = runCatching { UserRole.valueOf(role) }.getOrDefault(UserRole.STUDENT),
     institution = institution,
     fieldOfStudy = fieldOfStudy,
@@ -424,6 +425,7 @@ class RealUserRepository @Inject constructor(
                 com.citecircle.app.core.network.UserUpdateDto(
                     name = user.name,
                     avatarUrl = user.avatarUrl.takeIf { it.isNotBlank() },
+                    coverUrl = user.coverUrl.takeIf { it.isNotBlank() },
                     institution = user.institution.takeIf { it.isNotBlank() },
                     fieldOfStudy = user.fieldOfStudy.takeIf { it.isNotBlank() },
                     bio = user.bio.takeIf { it.isNotBlank() },

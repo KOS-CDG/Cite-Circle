@@ -9,13 +9,18 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -24,6 +29,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import coil.compose.AsyncImage
 import com.citecircle.app.core.data.PaperRepository
 import com.citecircle.app.core.data.UserRepository
 import com.citecircle.app.core.data.CircleRepository
@@ -63,6 +69,13 @@ class ProfileViewModel @Inject constructor(
     val state: StateFlow<ProfileState> = combine(_user, papers, joinedCircles) { user, papers, circles ->
         ProfileState.Success(user, papers, circles)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ProfileState.Loading)
+
+    fun updateCoverPhoto(coverUrl: String) {
+        viewModelScope.launch {
+            val current = (_user as? MutableStateFlow)?.value ?: return@launch
+            userRepository.updateCurrentUser(current.copy(coverUrl = coverUrl))
+        }
+    }
 }
 
 sealed interface ProfileState {
@@ -97,62 +110,131 @@ fun ProfileScreen(
             is ProfileState.Success -> {
                 val user = profileState.user
 
+                val pickCoverMediaLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.PickVisualMedia()
+                ) { uri ->
+                    if (uri != null) {
+                        viewModel.updateCoverPhoto(uri.toString())
+                    }
+                }
+
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 24.dp)
                 ) {
-                    // 1. Cover Gradient and Avatar details block
+                    // 1. Cover Photo & Profile Info Block
                     item {
-                        Column {
-                            // Header cover gradient
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            // Header cover photo container
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(130.dp)
-                                    .background(
-                                        brush = Brush.horizontalGradient(
-                                            colors = listOf(CcColors.InkNavy, CcColors.CircleBlue)
-                                        )
+                                    .height(150.dp)
+                            ) {
+                                if (user.coverUrl.isNotBlank()) {
+                                    AsyncImage(
+                                        model = user.coverUrl,
+                                        contentDescription = "Cover photo",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
                                     )
-                            )
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(
+                                                brush = Brush.horizontalGradient(
+                                                    colors = listOf(CcColors.InkNavy, CcColors.CircleBlue)
+                                                )
+                                            )
+                                    )
+                                }
 
-                            // Avatar overlay details
+                                // Cover Photo Upload Button
+                                Surface(
+                                    color = Color.Black.copy(alpha = 0.55f),
+                                    shape = RoundedCornerShape(20.dp),
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(12.dp)
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .clickable {
+                                            pickCoverMediaLauncher.launch(
+                                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                            )
+                                        }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.CameraAlt,
+                                            contentDescription = "Change Cover",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "Edit Cover",
+                                            color = Color.White,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Details block below cover
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 24.dp)
-                                    .layout { measurable, constraints ->
-                                        val placeable = measurable.measure(constraints)
-                                        val overlap = 40.dp.roundToPx()
-                                        layout(placeable.width, (placeable.height - overlap).coerceAtLeast(0)) {
-                                            placeable.placeRelative(0, -overlap)
-                                        }
-                                    }
+                                    .padding(horizontal = 20.dp)
                             ) {
-                                // 1. Top row: Avatar on left, Action buttons (Edit Profile & Settings) on right
+                                // Row 1: Overlapping Avatar on left, Action buttons on right
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.Bottom
                                 ) {
-                                    CcAvatar(user = user, size = 80.dp)
+                                    Box(modifier = Modifier.offset(y = (-36).dp)) {
+                                        CcAvatar(user = user, size = 80.dp, showRing = true)
+                                    }
 
                                     Row(
                                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                                         verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.padding(bottom = 4.dp)
+                                        modifier = Modifier.padding(bottom = 8.dp)
                                     ) {
-                                        CcSecondaryButton(
-                                            text = "Edit Profile",
+                                        Button(
                                             onClick = onEditProfile,
-                                            modifier = Modifier.height(36.dp)
-                                        )
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                            ),
+                                            shape = RoundedCornerShape(20.dp),
+                                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                                            modifier = Modifier.height(38.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.Edit,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "Edit Profile",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+
                                         IconButton(
                                             onClick = onSettingsClick,
                                             modifier = Modifier
-                                                .size(36.dp)
+                                                .size(38.dp)
                                                 .clip(CircleShape)
-                                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                                .background(MaterialTheme.colorScheme.surfaceVariant)
                                         ) {
                                             Icon(
                                                 Icons.Outlined.Settings,
@@ -163,9 +245,9 @@ fun ProfileScreen(
                                     }
                                 }
 
-                                Spacer(modifier = Modifier.height(14.dp))
+                                Spacer(modifier = Modifier.height((-18).dp))
 
-                                // 2. Name & Role information block
+                                // Row 2: User Name & Role Details
                                 Column(modifier = Modifier.fillMaxWidth()) {
                                     Text(
                                         text = user.name,

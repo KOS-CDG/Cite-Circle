@@ -37,6 +37,7 @@ data class UserDto(
     val id: String,
     val name: String,
     @SerialName("avatar_url") val avatarUrl: String = "",
+    @SerialName("cover_url") val coverUrl: String = "",
     val role: String = "STUDENT",
     val institution: String = "",
     @SerialName("field_of_study") val fieldOfStudy: String = "",
@@ -53,6 +54,7 @@ data class UserDto(
 data class UserUpdateDto(
     val name: String? = null,
     @SerialName("avatar_url") val avatarUrl: String? = null,
+    @SerialName("cover_url") val coverUrl: String? = null,
     val institution: String? = null,
     @SerialName("field_of_study") val fieldOfStudy: String? = null,
     val bio: String? = null,

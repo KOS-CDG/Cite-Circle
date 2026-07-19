@@ -15,6 +15,7 @@ data class User(
     val id: String,
     val name: String,
     val avatarUrl: String = "",
+    val coverUrl: String = "",
     val role: UserRole = UserRole.STUDENT,
     val institution: String = "",
     val fieldOfStudy: String = "",
