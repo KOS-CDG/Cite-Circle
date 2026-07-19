@@ -106,7 +106,7 @@ object DataModule {
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
-    private const val FIREWORKS_BASE_URL = "https://api.fireworks.ai/"
+    private const val FIREWORKS_BASE_URL = "https://api.fireworks.ai/inference/v1/"
 
     @Provides @Singleton
     fun provideJson(): Json = Json {

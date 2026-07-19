@@ -40,6 +40,6 @@ data class ChatCompletionResponse(
 )
 
 interface FireworksApi {
-    @POST("inference/v1/chat/completions")
+    @POST("chat/completions")
     suspend fun chatCompletions(@Body request: ChatCompletionRequest): ChatCompletionResponse
 }
