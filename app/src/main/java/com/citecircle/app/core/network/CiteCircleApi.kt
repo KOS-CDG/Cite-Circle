@@ -212,6 +212,12 @@ data class CircleDto(
     @SerialName("post_count") val postCount: Int = 0,
 )
 
+@Serializable
+data class PublishPaperResponseDto(
+    val paper: PaperDto,
+    @SerialName("thumbnail_url") val thumbnailUrl: String = ""
+)
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Retrofit API Interface
 // ──────────────────────────────────────────────────────────────────────────────
@@ -299,7 +305,7 @@ interface CiteCircleApi {
         @Part("doi") doi: RequestBody,
         @Part("journal") journal: RequestBody,
         @Part("circle_id") circleId: RequestBody?,
-    ): Map<String, @JvmSuppressWildcards Any>
+    ): PublishPaperResponseDto
 
     // ── AI Review ─────────────────────────────────────────────────────────────
 

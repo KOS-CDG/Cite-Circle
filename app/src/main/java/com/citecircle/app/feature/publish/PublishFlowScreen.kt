@@ -301,8 +301,8 @@ fun Step2Details(
     var pdfSizeLabel by remember { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
-    val pdfPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) {
             val projection = arrayOf(
@@ -378,7 +378,7 @@ fun Step2Details(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // PDF Attachment Block
+        // Document Attachment Block
         if (pdfName != null) {
             Row(
                 modifier = Modifier
@@ -388,7 +388,7 @@ fun Step2Details(
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Filled.Description, contentDescription = "PDF Uploaded", tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Filled.Description, contentDescription = "File Uploaded", tint = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = pdfName!!, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
@@ -401,13 +401,25 @@ fun Step2Details(
                     pdfSizeLabel = null
                     onDraftChange(draft.copy(title = title, abstract = abstract, pdfFileName = null, pdfFileSizeKb = null, pdfUri = null))
                 }) {
-                    Icon(Icons.Filled.Close, contentDescription = "Remove PDF", tint = CcColors.CoralPop)
+                    Icon(Icons.Filled.Close, contentDescription = "Remove manuscript", tint = CcColors.CoralPop)
                 }
             }
         } else {
             CcSecondaryButton(
-                text = "Upload manuscript PDF",
-                onClick = { pdfPickerLauncher.launch("application/pdf") },
+                text = "Upload manuscript (PDF, Word, or Text)",
+                onClick = {
+                    filePickerLauncher.launch(
+                        arrayOf(
+                            "application/pdf",
+                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            "application/msword",
+                            "application/vnd.oasis.opendocument.text",
+                            "text/plain",
+                            "application/rtf",
+                            "text/rtf"
+                        )
+                    )
+                },
                 icon = Icons.Filled.Add,
                 modifier = Modifier.fillMaxWidth()
             )
