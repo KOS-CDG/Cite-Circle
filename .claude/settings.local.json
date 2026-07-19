@@ -14,7 +14,16 @@
       "Bash(adb shell *)",
       "Bash(echo \"exit: $?\")",
       "Bash(./gradlew assembleDebug)",
-      "Bash(adb exec-out *)"
+      "Bash(adb exec-out *)",
+      "Bash(git init *)",
+      "Bash(git checkout *)",
+      "Bash(git add *)",
+      "Bash(git commit -q -m 'Add Quick Post composer \\(Priority 1.1\\) *)",
+      "Bash(./gradlew :app:assembleDebug)",
+      "Bash(env ANDROID_SDK_ROOT=$HOME/Android/Sdk $HOME/Android/Sdk/platform-tools/adb devices 2>/dev/null)",
+      "Bash(/home/dhale/Android/Sdk/platform-tools/adb install *)",
+      "Bash(/home/dhale/Android/Sdk/platform-tools/adb shell *)",
+      "Bash(/home/dhale/Android/Sdk/platform-tools/adb exec-out *)"
     ]
   }
 }

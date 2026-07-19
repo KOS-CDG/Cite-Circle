@@ -1,7 +1,10 @@
 package com.citecircle.app.feature.feed
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -22,9 +25,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -38,7 +44,7 @@ import com.citecircle.app.core.model.PostType
 import java.text.SimpleDateFormat
 import java.util.*
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun PostCard(
     post: Post,
@@ -49,172 +55,262 @@ fun PostCard(
     onSave: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    CcCard(
-        modifier = modifier
-            .fillMaxWidth()
-            .pointerInput(post.id) {
-                detectTapGestures(
-                    onDoubleTap = { onEndorse(post.id) },
-                    onTap = { onPostClick(post.id) }
-                )
+    val haptic = LocalHapticFeedback.current
+    val clipboardManager = LocalClipboardManager.current
+
+    // Swipe-to-save (right) / swipe-to-share (left)
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { dismissValue ->
+            when (dismissValue) {
+                SwipeToDismissBoxValue.StartToEnd -> {
+                    // Right swipe: save post
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onSave(post.id)
+                    false // Don't remove card, just trigger action
+                }
+                SwipeToDismissBoxValue.EndToStart -> {
+                    // Left swipe: copy link to clipboard
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    clipboardManager.setText(AnnotatedString("https://citecircle.app/post/${post.id}"))
+                    false // Don't remove card, just trigger action
+                }
+                else -> false
             }
+        },
+        positionalThreshold = { totalDistance -> totalDistance * 0.35f }
+    )
+
+    SwipeToDismissBox(
+        state = dismissState,
+        modifier = modifier,
+        backgroundContent = {
+            // Determine swipe direction to show appropriate background
+            val direction = dismissState.dismissDirection
+            val isSave = direction == SwipeToDismissBoxValue.StartToEnd
+            val bgColor by animateColorAsState(
+                targetValue = when (direction) {
+                    SwipeToDismissBoxValue.StartToEnd -> CcColors.SeafoamTeal.copy(alpha = 0.15f)
+                    SwipeToDismissBoxValue.EndToStart -> CcColors.CircleBlue.copy(alpha = 0.15f)
+                    else -> Color.Transparent
+                },
+                animationSpec = tween(150),
+                label = "swipe_bg"
+            )
+            val iconScale by animateFloatAsState(
+                targetValue = if (direction != SwipeToDismissBoxValue.Settled) 1.1f else 0.8f,
+                animationSpec = tween(150),
+                label = "icon_scale"
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(bgColor),
+                contentAlignment = if (isSave) Alignment.CenterStart else Alignment.CenterEnd
+            ) {
+                Column(
+                    modifier = Modifier
+                        .scale(iconScale)
+                        .padding(horizontal = 20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = if (isSave) Icons.Filled.Bookmark else Icons.Outlined.Share,
+                        contentDescription = if (isSave) "Save post" else "Share post",
+                        tint = if (isSave) CcColors.SeafoamTeal else CcColors.CircleBlue,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = if (isSave) "Save" else "Share",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isSave) CcColors.SeafoamTeal else CcColors.CircleBlue
+                    )
+                }
+            }
+        },
+        enableDismissFromStartToEnd = true,
+        enableDismissFromEndToStart = true
     ) {
-        Column(
+        CcCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .pointerInput(post.id) {
+                    detectTapGestures(
+                        onDoubleTap = { onEndorse(post.id) },
+                        onTap = { onPostClick(post.id) }
+                    )
+                }
         ) {
-            // Milestone check
-            if (post.type == PostType.MILESTONE && post.milestoneText != null) {
-                MilestoneHeader(post.milestoneText)
-                return@Column
-            }
-
-            // Normal Post header
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
             ) {
-                CcAvatar(
-                    user = post.author,
-                    size = 40.dp,
-                    modifier = Modifier.clickable { onUserClick(post.author.id) }
-                )
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = post.author.name,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.clickable { onUserClick(post.author.id) }
-                        )
-
-                        Spacer(modifier = Modifier.width(6.dp))
-
-                        // Role Emoji/Badge
-                        Text(
-                            text = post.author.role.emoji(),
-                            fontSize = 12.sp
-                        )
-                    }
-
-                    Text(
-                        text = "${post.author.institution} • ${formatRelativeTime(post.timestamp)}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.ccColors.marginGray,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                // Milestone check
+                if (post.type == PostType.MILESTONE && post.milestoneText != null) {
+                    MilestoneHeader(post.milestoneText)
+                    return@Column
                 }
 
-                // Optional Circle destination tag
-                if (post.circleId != null && post.circleName != null) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
-                            .clickable { onCircleClick(post.circleId) }
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = "c/${post.circleName}",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Flair
-            if (post.flair != PostFlair.NONE) {
-                FlairChip(post.flair)
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-
-            // Post content body
-            Text(
-                text = post.content,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            // Optional attached paper
-            if (post.type == PostType.PAPER_SHARE && post.attachedPaper != null) {
-                Spacer(modifier = Modifier.height(12.dp))
-                PaperMiniCard(paper = post.attachedPaper, onUserClick = onUserClick)
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Action footer
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Endorse
-                EndorseButton(
-                    isEndorsed = post.isEndorsed,
-                    endorseCount = post.endorseCount,
-                    onEndorse = { onEndorse(post.id) }
-                )
-
-                // Comment
+                // Normal Post header
                 Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .clickable { onPostClick(post.id) }
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(
-                        Icons.Outlined.ChatBubbleOutline,
-                        contentDescription = "Comments count",
-                        tint = MaterialTheme.ccColors.marginGray,
-                        modifier = Modifier.size(18.dp)
+                    CcAvatar(
+                        user = post.author,
+                        size = 40.dp,
+                        modifier = Modifier.clickable { onUserClick(post.author.id) }
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = post.commentCount.toString(),
-                        color = MaterialTheme.ccColors.marginGray,
-                        style = MaterialTheme.typography.labelMedium
-                    )
-                }
 
-                // Share
-                val clipboardManager = LocalClipboardManager.current
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .clickable {
-                            clipboardManager.setText(AnnotatedString("https://citecircle.app/post/${post.id}"))
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = post.author.name,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.clickable { onUserClick(post.author.id) }
+                            )
+
+                            Spacer(modifier = Modifier.width(6.dp))
+
+                            // Role Emoji/Badge
+                            Text(
+                                text = post.author.role.emoji(),
+                                fontSize = 12.sp
+                            )
                         }
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Outlined.Share,
-                        contentDescription = "Share post",
-                        tint = MaterialTheme.ccColors.marginGray,
-                        modifier = Modifier.size(18.dp)
-                    )
+
+                        // Institution + relative timestamp (long-press for absolute date)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "${post.author.institution} •",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.ccColors.marginGray,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            CcTimestamp(timestamp = post.timestamp)
+                        }
+                    }
+
+                    // Optional Circle destination tag
+                    if (post.circleId != null && post.circleName != null) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
+                                .clickable { onCircleClick(post.circleId) }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "c/${post.circleName}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                 }
 
-                // Save
-                IconButton(onClick = { onSave(post.id) }) {
-                    Icon(
-                        imageVector = if (post.isSaved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
-                        contentDescription = "Save post",
-                        tint = if (post.isSaved) MaterialTheme.colorScheme.primary else MaterialTheme.ccColors.marginGray,
-                        modifier = Modifier.size(20.dp)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Flair
+                if (post.flair != PostFlair.NONE) {
+                    FlairChip(post.flair)
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                // Post content body
+                Text(
+                    text = post.content,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Optional attached paper
+                if (post.type == PostType.PAPER_SHARE && post.attachedPaper != null) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    PaperMiniCard(paper = post.attachedPaper, onUserClick = onUserClick)
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Action footer
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Endorse
+                    EndorseButton(
+                        isEndorsed = post.isEndorsed,
+                        endorseCount = post.endorseCount,
+                        onEndorse = { onEndorse(post.id) }
                     )
+
+                    // Comment
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .clickable { onPostClick(post.id) }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Outlined.ChatBubbleOutline,
+                            contentDescription = "Comments count",
+                            tint = MaterialTheme.ccColors.marginGray,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = post.commentCount.toString(),
+                            color = MaterialTheme.ccColors.marginGray,
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+
+                    // Share (copy link)
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                clipboardManager.setText(AnnotatedString("https://citecircle.app/post/${post.id}"))
+                            }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Outlined.Share,
+                            contentDescription = "Share post",
+                            tint = MaterialTheme.ccColors.marginGray,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    // Save
+                    IconButton(onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onSave(post.id)
+                    }) {
+                        Icon(
+                            imageVector = if (post.isSaved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
+                            contentDescription = "Save post",
+                            tint = if (post.isSaved) MaterialTheme.colorScheme.primary else MaterialTheme.ccColors.marginGray,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }

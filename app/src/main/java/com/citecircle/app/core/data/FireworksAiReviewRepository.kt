@@ -74,7 +74,8 @@ class FireworksAiReviewRepository @Inject constructor(
                     ChatMessage(role = "system", content = systemPrompt),
                     ChatMessage(role = "user", content = userContent)
                 ),
-                temperature = 0.2
+                temperature = 0.2,
+                useJsonMode = true
             )
 
             val response = api.chatCompletions(request)

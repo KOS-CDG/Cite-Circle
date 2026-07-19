@@ -28,7 +28,6 @@ import com.citecircle.app.core.data.NotificationRepository
 import com.citecircle.app.core.designsystem.*
 import com.citecircle.app.core.model.NotifType
 import com.citecircle.app.core.model.Notification
-import com.citecircle.app.feature.feed.formatRelativeTime
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -223,11 +222,7 @@ fun NotificationItemRow(
                 fontWeight = if (!notification.isRead) FontWeight.Bold else FontWeight.Normal
             )
             Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = formatRelativeTime(notification.timestamp),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.ccColors.marginGray
-            )
+            CcTimestamp(timestamp = notification.timestamp)
         }
 
         if (!notification.isRead) {

@@ -3,9 +3,11 @@ package com.citecircle.app.core.designsystem
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -46,6 +48,9 @@ import com.citecircle.app.core.model.User
 import com.citecircle.app.core.model.UserRole
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -531,6 +536,115 @@ fun CcPostShimmer() {
                 ShimmerBox(Modifier.width(60.dp).height(28.dp).clip(RoundedCornerShape(20.dp)))
             }
         }
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// CcCircleShimmer — skeleton placeholder for circle grid cards while loading
+// ──────────────────────────────────────────────────────────────────────────────
+
+@Composable
+fun CcCircleShimmer() {
+    CcCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(230.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Header row: emoji badge + join button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ShimmerBox(Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)))
+                ShimmerBox(Modifier.width(64.dp).height(28.dp).clip(RoundedCornerShape(8.dp)))
+            }
+            // Name and category lines
+            Column {
+                ShimmerBox(Modifier.fillMaxWidth(0.75f).height(16.dp))
+                Spacer(Modifier.height(8.dp))
+                ShimmerBox(Modifier.fillMaxWidth(0.45f).height(12.dp))
+            }
+            // Activity bar placeholder
+            ShimmerBox(Modifier.fillMaxWidth().height(24.dp).clip(RoundedCornerShape(4.dp)))
+            // Footer stats
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ShimmerBox(Modifier.width(70.dp).height(12.dp))
+                ShimmerBox(Modifier.width(70.dp).height(12.dp))
+            }
+        }
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// CcTimestamp — relative time label with long-press tooltip for full date
+// ──────────────────────────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun CcTimestamp(
+    timestamp: Long,
+    modifier: Modifier = Modifier
+) {
+    var showTooltip by remember { mutableStateOf(false) }
+    val relativeText = remember(timestamp) { formatTimestamp(timestamp) }
+    val absoluteText = remember(timestamp) {
+        SimpleDateFormat("MMM dd, yyyy • h:mm a", Locale.getDefault()).format(Date(timestamp))
+    }
+
+    Box(modifier = modifier) {
+        Text(
+            text = relativeText,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.ccColors.marginGray,
+            modifier = Modifier.combinedClickable(
+                onClick = {},
+                onLongClick = { showTooltip = !showTooltip }
+            )
+        )
+        if (showTooltip) {
+            // Dismiss tooltip on click anywhere
+            LaunchedEffect(Unit) {
+                delay(3000)
+                showTooltip = false
+            }
+            Box(
+                modifier = Modifier
+                    .offset(y = 20.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.inverseSurface)
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                    .clickable { showTooltip = false }
+            ) {
+                Text(
+                    text = absoluteText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.inverseOnSurface
+                )
+            }
+        }
+    }
+}
+
+/** Shared timestamp formatter — same logic as [formatRelativeTime] in PostCard.kt */
+private fun formatTimestamp(timestamp: Long): String {
+    val diff = System.currentTimeMillis() - timestamp
+    val seconds = diff / 1000
+    val minutes = seconds / 60
+    val hours = minutes / 60
+    val days = hours / 24
+    return when {
+        days > 30 -> SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(Date(timestamp))
+        days > 0  -> "${days}d ago"
+        hours > 0 -> "${hours}h ago"
+        minutes > 0 -> "${minutes}m ago"
+        else -> "Just now"
     }
 }
 

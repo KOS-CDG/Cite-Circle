@@ -38,6 +38,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import kotlinx.coroutines.delay
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import kotlinx.coroutines.flow.onEach
 
 // ──────────────────────────────────────────────────────────────────────────────
 // CirclesViewModel
@@ -85,12 +88,41 @@ class CirclesViewModel @Inject constructor(
         return flow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), this.value)
     }
 
+    private val _isLoading = MutableStateFlow(true)
+    val isLoading = _isLoading.asStateFlow()
+
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing = _isRefreshing.asStateFlow()
+
+    init {
+        // Mark loading done once data arrives
+        viewModelScope.launch {
+            _circles.onEach {
+                _isLoading.value = false
+            }.collect {}
+        }
+        // Safety net: never show shimmer longer than 2s
+        viewModelScope.launch {
+            delay(2000)
+            _isLoading.value = false
+        }
+    }
+
+    fun refreshCircles() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            delay(800)
+            _isRefreshing.value = false
+        }
+    }
+
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
 // CirclesScreen Composable
 // ──────────────────────────────────────────────────────────────────────────────
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CirclesScreen(
     onCircleClick: (String) -> Unit,
@@ -100,6 +132,8 @@ fun CirclesScreen(
     val discoverCircles by viewModel.discoverCircles.collectAsState()
     val joinedCircles by viewModel.joinedCircles.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val isRefreshing by viewModel.isRefreshing.collectAsState()
 
     Column(
         modifier = Modifier
@@ -136,7 +170,20 @@ fun CirclesScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            if (discoverCircles.isEmpty()) {
+            // Show shimmer while initial data loads
+            if (isLoading) {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    contentPadding = PaddingValues(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(4) {
+                        CcCircleShimmer()
+                    }
+                }
+            } else if (discoverCircles.isEmpty()) {
                 CcEmptyState(
                     emoji = "🔍",
                     title = "No circles found",
@@ -145,19 +192,25 @@ fun CirclesScreen(
                     onAction = { viewModel.updateSearchQuery("") }
                 )
             } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    contentPadding = PaddingValues(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxSize()
+                PullToRefreshBox(
+                    isRefreshing = isRefreshing,
+                    onRefresh = { viewModel.refreshCircles() },
+                    modifier = Modifier.weight(1f).fillMaxWidth()
                 ) {
-                    items(discoverCircles, key = { it.id }) { circle ->
-                        DiscoverCircleCard(
-                            circle = circle,
-                            onClick = { onCircleClick(circle.id) },
-                            onJoinToggle = { viewModel.toggleJoinCircle(circle.id, circle.isJoined) }
-                        )
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        contentPadding = PaddingValues(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(discoverCircles, key = { it.id }) { circle ->
+                            DiscoverCircleCard(
+                                circle = circle,
+                                onClick = { onCircleClick(circle.id) },
+                                onJoinToggle = { viewModel.toggleJoinCircle(circle.id, circle.isJoined) }
+                            )
+                        }
                     }
                 }
             }

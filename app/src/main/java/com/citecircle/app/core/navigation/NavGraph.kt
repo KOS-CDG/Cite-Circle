@@ -315,6 +315,7 @@ fun CiteCircleNavHost(
                 notificationCount = unreadNotifications,
                 onMessagesClick = { navController.navigate(MessagesRoute) },
                 messageCount = unreadMessages,
+                onAiChatClick = { navController.navigate(ChatRoute("conv_ai")) },
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
@@ -350,6 +351,7 @@ fun CcTopBar(
     onSearchClick: () -> Unit,
     onNotificationsClick: () -> Unit,
     onMessagesClick: () -> Unit,
+    onAiChatClick: () -> Unit = {},
     notificationCount: Int = 0,
     messageCount: Int = 0,
     modifier: Modifier = Modifier
@@ -378,7 +380,7 @@ fun CcTopBar(
             .padding(horizontal = 16.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Wordmark
+        // Wordmark — tapping opens the AI Copilot chat directly
         Text(
             text = "CiteCircle",
             style = MaterialTheme.typography.headlineSmall.copy(
@@ -387,7 +389,10 @@ fun CcTopBar(
                 fontStyle = FontStyle.Italic
             ),
             color = MaterialTheme.ccColors.inkNavy,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier
+                .weight(1f)
+                .clickable(onClick = onAiChatClick)
+                .semantics { contentDescription = "Open AI Copilot" }
         )
 
         // Actions

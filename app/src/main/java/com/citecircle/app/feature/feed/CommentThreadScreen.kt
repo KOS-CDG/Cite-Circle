@@ -372,11 +372,7 @@ fun CommentRowItem(
             Spacer(modifier = Modifier.height(6.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = formatRelativeTime(comment.timestamp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.ccColors.marginGray
-                )
+                CcTimestamp(timestamp = comment.timestamp)
                 Spacer(modifier = Modifier.width(16.dp))
                 Text(
                     text = "Reply",
