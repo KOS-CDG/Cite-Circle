@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -58,6 +59,13 @@ private fun PostDto.toDomain(author: User = User(id = authorId, name = "")) = Po
     milestoneText = milestoneText,
     flair = runCatching { PostFlair.valueOf(flair) }.getOrDefault(PostFlair.NONE),
     imageUrl = imageUrl,
+)
+
+private fun ShelfDto.toDomain() = Shelf(
+    id = id,
+    name = name,
+    description = description,
+    paperIds = paperIds,
 )
 
 private fun PaperDto.toDomain() = Paper(
@@ -408,14 +416,18 @@ class RealUserRepository @Inject constructor(
     }
 
     override suspend fun acceptConnection(userId: String): Boolean {
-        // Server doesn't yet have a dedicated accept endpoint; best-effort follow
         return try {
-            api.toggleFollow(userId)
+            api.acceptConnection(userId)
             true
         } catch (e: Exception) { false }
     }
 
-    override suspend fun declineConnection(userId: String): Boolean = true
+    override suspend fun declineConnection(userId: String): Boolean {
+        return try {
+            api.declineConnection(userId)
+            true
+        } catch (e: Exception) { false }
+    }
 
     override suspend fun updateCurrentUser(user: User): Boolean {
         _currentUser.value = user
@@ -530,6 +542,10 @@ class RealPaperRepository @Inject constructor(
     private val _shelves = MutableStateFlow<List<Shelf>>(emptyList())
     private val _summaryCache = mutableMapOf<String, String>()
 
+    private companion object {
+        const val DEFAULT_SHELF_NAME = "Saved"
+    }
+
     init {
         CoroutineScope(Dispatchers.IO).launch {
             tokenManager.getSavedPapersJson()?.let { jsonStr ->
@@ -544,6 +560,31 @@ class RealPaperRepository @Inject constructor(
                     _shelves.value = shelves
                 }
             }
+            // Local cache is only a warm start; the server is authoritative when reachable.
+            refreshShelves()
+        }
+    }
+
+    /** Pulls shelves from the server. Returns false (leaving the cache intact) when offline. */
+    private suspend fun refreshShelves(): Boolean = runCatching {
+        val remote = api.getShelves().map { it.toDomain() }
+        _shelves.value = remote
+        _savedPaperIds.value = remote.flatMap { it.paperIds }.toMutableSet()
+        persistState()
+        true
+    }.getOrDefault(false)
+
+    /**
+     * Resolves the shelf backing the plain "save paper" action. The backend models
+     * bookmarks as shelf membership, so a toggle needs a concrete shelf to write to.
+     */
+    private suspend fun defaultShelf(): Shelf? {
+        _shelves.value.firstOrNull { it.name == DEFAULT_SHELF_NAME }?.let { return it }
+        return runCatching {
+            api.createShelf(CreateShelfDto(DEFAULT_SHELF_NAME, "Papers you saved")).toDomain()
+        }.getOrNull()?.also { shelf ->
+            _shelves.value = _shelves.value + shelf
+            persistState()
         }
     }
 
@@ -670,7 +711,8 @@ class RealPaperRepository @Inject constructor(
     }
 
     override fun getSavedPapers(): Flow<List<Paper>> = flow {
-        // Fetch all papers from API and filter to only the ones the user has saved locally
+        // Saved state lives in shelf membership server-side, so sync before filtering.
+        refreshShelves()
         val savedIds = _savedPaperIds.value
         if (savedIds.isEmpty()) {
             emit(emptyList())
@@ -685,12 +727,16 @@ class RealPaperRepository @Inject constructor(
         }
     }
 
-    override fun getShelves(): Flow<List<Shelf>> = _shelves.asStateFlow()
+    override fun getShelves(): Flow<List<Shelf>> =
+        _shelves.asStateFlow().onStart { refreshShelves() }
 
     override suspend fun createShelf(name: String, description: String): Boolean {
-        val current = _shelves.value.toMutableList()
-        current.add(Shelf(id = "s${System.currentTimeMillis()}", name = name, description = description))
-        _shelves.value = current
+        // Created server-side first so the row carries the backend's id; a locally
+        // minted id would never match the shelf that later comes back from /shelves.
+        val remote = runCatching { api.createShelf(CreateShelfDto(name, description)).toDomain() }
+            .getOrNull()
+        if (remote == null) return false
+        _shelves.value = _shelves.value + remote
         persistState()
         return true
     }
@@ -706,7 +752,7 @@ class RealPaperRepository @Inject constructor(
         }
         _savedPaperIds.value = _savedPaperIds.value.toMutableSet().apply { add(paperId) }
         persistState()
-        return true
+        return runCatching { api.addPaperToShelf(shelfId, paperId); true }.getOrDefault(false)
     }
 
     override suspend fun removePaperFromShelf(paperId: String, shelfId: String): Boolean {
@@ -716,16 +762,20 @@ class RealPaperRepository @Inject constructor(
         val shelf = current[idx]
         current[idx] = shelf.copy(paperIds = shelf.paperIds.filter { it != paperId })
         _shelves.value = current
+        if (_shelves.value.none { it.paperIds.contains(paperId) }) {
+            _savedPaperIds.value = _savedPaperIds.value.toMutableSet().apply { remove(paperId) }
+        }
         persistState()
-        return true
+        return runCatching { api.removePaperFromShelf(shelfId, paperId); true }.getOrDefault(false)
     }
 
     override suspend fun toggleSavePaper(paperId: String): Boolean {
-        val saved = _savedPaperIds.value.toMutableSet()
-        if (saved.contains(paperId)) saved.remove(paperId) else saved.add(paperId)
-        _savedPaperIds.value = saved
-        persistState()
-        return true
+        val shelf = defaultShelf() ?: return false
+        return if (_savedPaperIds.value.contains(paperId)) {
+            removePaperFromShelf(paperId, shelf.id)
+        } else {
+            addPaperToShelf(paperId, shelf.id)
+        }
     }
 
     override fun isPaperSaved(paperId: String): Flow<Boolean> =
@@ -1007,7 +1057,7 @@ class RealNotificationRepository @Inject constructor(
     }
 
     override suspend fun dismissNotification(notifId: String) {
-        // Server-side dismissal not yet implemented; no-op
+        try { api.dismissNotification(notifId) } catch (_: Exception) {}
     }
 }
 

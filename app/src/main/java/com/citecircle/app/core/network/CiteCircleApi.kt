@@ -180,6 +180,13 @@ data class ShelfDto(
     @SerialName("owner_id") val ownerId: String,
     val name: String,
     val description: String = "",
+    @SerialName("paper_ids") val paperIds: List<String> = emptyList(),
+)
+
+@Serializable
+data class CreateShelfDto(
+    val name: String,
+    val description: String = "",
 )
 
 @Serializable
@@ -189,12 +196,25 @@ data class AiReviewReportDto(
     @SerialName("paper_title") val paperTitle: String = "",
     val model: String = "",
     @SerialName("overall_score") val overallScore: Int = 0,
+    val structure: Int = 0,
+    val citations: Int = 0,
+    val clarity: Int = 0,
+    val originality: Int = 0,
     val verdict: String = "",
     val summary: String = "",
     val strengths: List<String> = emptyList(),
     val weaknesses: List<String> = emptyList(),
-    val suggestions: List<String> = emptyList(),
+    val suggestions: List<AiSuggestionDto> = emptyList(),
     @SerialName("created_at") val createdAt: Long = 0,
+)
+
+@Serializable
+data class AiSuggestionDto(
+    val id: String,
+    val section: String = "General",
+    val text: String,
+    val severity: String = "MODERATE",
+    @SerialName("is_addressed") val isAddressed: Boolean = false,
 )
 
 @Serializable
@@ -255,6 +275,12 @@ interface CiteCircleApi {
 
     @POST("users/{userId}/connect")
     suspend fun requestConnection(@Path("userId") userId: String): ConnectionResponseDto
+
+    @POST("users/{userId}/accept")
+    suspend fun acceptConnection(@Path("userId") userId: String): ConnectionResponseDto
+
+    @POST("users/{userId}/decline")
+    suspend fun declineConnection(@Path("userId") userId: String): ConnectionResponseDto
 
     // ── Posts ─────────────────────────────────────────────────────────────────
 
@@ -323,6 +349,26 @@ interface CiteCircleApi {
         @Part("circle_id") circleId: RequestBody?,
     ): PublishPaperResponseDto
 
+    // ── Shelves ───────────────────────────────────────────────────────────────
+
+    @GET("shelves")
+    suspend fun getShelves(): List<ShelfDto>
+
+    @POST("shelves")
+    suspend fun createShelf(@Body body: CreateShelfDto): ShelfDto
+
+    @POST("shelves/{shelfId}/papers/{paperId}")
+    suspend fun addPaperToShelf(
+        @Path("shelfId") shelfId: String,
+        @Path("paperId") paperId: String,
+    ): Map<String, Boolean>
+
+    @DELETE("shelves/{shelfId}/papers/{paperId}")
+    suspend fun removePaperFromShelf(
+        @Path("shelfId") shelfId: String,
+        @Path("paperId") paperId: String,
+    ): Map<String, Boolean>
+
     // ── AI Review ─────────────────────────────────────────────────────────────
 
     @POST("papers/review")
@@ -371,6 +417,9 @@ interface CiteCircleApi {
 
     @POST("notifications/{notifId}/read")
     suspend fun markNotificationRead(@Path("notifId") notifId: String): Map<String, Boolean>
+
+    @DELETE("notifications/{notifId}")
+    suspend fun dismissNotification(@Path("notifId") notifId: String): Map<String, Boolean>
 
     // ── Search ────────────────────────────────────────────────────────────────
 
