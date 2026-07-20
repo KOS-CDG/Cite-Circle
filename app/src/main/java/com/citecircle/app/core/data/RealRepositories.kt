@@ -980,35 +980,72 @@ class RealMessageRepository @Inject constructor(
     }
 
     override suspend fun sendMessage(convId: String, content: String): Message {
+        if (convId == "conv_ai") {
+            ensureAiMessagesLoaded()
+            val now = System.currentTimeMillis()
+            val userMsg = Message(
+                id = "msg_u_$now",
+                senderId = FakeDataSource.currentUser.id,
+                content = content,
+                timestamp = now
+            )
+
+            // Instantly append user message to local state
+            val listWithUser = _aiMessages.value.filterNot { it.id.startsWith("msg_optimistic_") } + userMsg
+            _aiMessages.value = listWithUser
+
+            val aiReplyContent = try {
+                val request = ChatCompletionRequest(
+                    model = "accounts/fireworks/models/llama-v3p3-70b-instruct",
+                    messages = listOf(
+                        ChatMessage(
+                            role = "system",
+                            content = "You are the CiteCircle Research Copilot, a concise assistant for academics. Help with literature questions, methodology, and writing. Keep answers under 250 words."
+                        ),
+                        ChatMessage(role = "user", content = content)
+                    ),
+                    temperature = 0.7,
+                    maxTokens = 600,
+                    useJsonMode = false
+                )
+                val response = fireworksApi.chatCompletions(request)
+                response.choices.firstOrNull()?.message?.content?.trim()
+                    ?: "I'm sorry, I couldn't process that request right now."
+            } catch (e: Exception) {
+                "AI Copilot is temporarily unavailable (${e.localizedMessage}). Please try again."
+            }
+
+            val aiMsg = Message(
+                id = "msg_ai_${System.currentTimeMillis()}",
+                senderId = "ai_copilot",
+                content = aiReplyContent,
+                timestamp = System.currentTimeMillis()
+            )
+
+            val updatedList = listWithUser + aiMsg
+            _aiMessages.value = updatedList
+            runCatching {
+                tokenManager.saveAiMessagesJson(json.encodeToString(ListSerializer(Message.serializer()), updatedList))
+            }
+
+            // Sync with server asynchronously in the background so UI never waits on Render
+            CoroutineScope(Dispatchers.IO).launch {
+                runCatching { api.sendMessage(convId, MessageCreateDto(content)) }
+            }
+
+            return userMsg
+        }
+
         return try {
             val dtos = api.sendMessage(convId, MessageCreateDto(content))
-            val domainMsgs = dtos.map { it.toDomain() }
-            if (convId == "conv_ai" && domainMsgs.isNotEmpty()) {
-                ensureAiMessagesLoaded()
-                val current = _aiMessages.value.filterNot { it.id.startsWith("msg_optimistic_") }
-                val updated = (current + domainMsgs).distinctBy { it.id }
-                _aiMessages.value = updated
-                runCatching {
-                    tokenManager.saveAiMessagesJson(json.encodeToString(ListSerializer(Message.serializer()), updated))
-                }
-            }
-            domainMsgs.first()
+            dtos.first().toDomain()
         } catch (e: Exception) {
-            val fallbackMsg = Message(
+            Message(
                 id = "msg_${System.currentTimeMillis()}",
                 senderId = FakeDataSource.currentUser.id,
                 content = content,
                 timestamp = System.currentTimeMillis()
             )
-            if (convId == "conv_ai") {
-                ensureAiMessagesLoaded()
-                val updated = _aiMessages.value + fallbackMsg
-                _aiMessages.value = updated
-                runCatching {
-                    tokenManager.saveAiMessagesJson(json.encodeToString(ListSerializer(Message.serializer()), updated))
-                }
-            }
-            fallbackMsg
         }
     }
 
