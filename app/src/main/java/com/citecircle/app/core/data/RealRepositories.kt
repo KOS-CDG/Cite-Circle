@@ -996,7 +996,7 @@ class RealMessageRepository @Inject constructor(
 
             val aiReplyContent = try {
                 val request = ChatCompletionRequest(
-                    model = "accounts/fireworks/models/llama-v3p3-70b-instruct",
+                    model = "accounts/fireworks/models/deepseek-v4-pro",
                     messages = listOf(
                         ChatMessage(
                             role = "system",
