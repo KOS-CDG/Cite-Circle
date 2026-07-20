@@ -251,7 +251,7 @@ fun SavedPapersContent(
             paper.title.contains(searchQuery, ignoreCase = true) ||
                     paper.authors.any { it.name.contains(searchQuery, ignoreCase = true) } ||
                     paper.fieldTags.any { it.contains(searchQuery, ignoreCase = true) }
-        }
+        }.distinctBy { it.id }
     }
 
     if (filteredPapers.isEmpty()) {
@@ -291,7 +291,7 @@ fun ShelvesContent(
         shelves.filter { shelf ->
             shelf.name.contains(searchQuery, ignoreCase = true) ||
                     shelf.description.contains(searchQuery, ignoreCase = true)
-        }
+        }.distinctBy { it.id }
     }
 
     if (filteredShelves.isEmpty()) {
@@ -385,7 +385,7 @@ fun ShelfDetailsContent(
     onRemovePaper: (String) -> Unit
 ) {
     val shelfPapers = remember(shelf, allPapers) {
-        allPapers.filter { shelf.paperIds.contains(it.id) }
+        allPapers.filter { shelf.paperIds.contains(it.id) }.distinctBy { it.id }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {

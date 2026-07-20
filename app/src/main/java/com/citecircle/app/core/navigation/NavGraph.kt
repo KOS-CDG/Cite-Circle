@@ -321,7 +321,11 @@ fun CiteCircleNavHost(
         if (showTopBar) {
             CcTopBar(
                 onSearchClick = { navController.navigate(SearchRoute) },
-                onLibraryClick = { navController.navigate(LibraryRoute) },
+                onLibraryClick = {
+                    navController.navigate(LibraryRoute) {
+                        launchSingleTop = true
+                    }
+                },
                 onNotificationsClick = { navController.navigate(NotificationsRoute) },
                 notificationCount = unreadNotifications,
                 onMessagesClick = { navController.navigate(MessagesRoute) },

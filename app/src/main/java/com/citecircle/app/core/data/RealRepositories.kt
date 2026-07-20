@@ -538,7 +538,7 @@ class RealPaperRepository @Inject constructor(
     private val json: Json,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context,
 ) : PaperRepository {
-    private val _savedPaperIds = MutableStateFlow(mutableSetOf<String>())
+    private val _savedPaperIds = MutableStateFlow<Set<String>>(emptySet())
     private val _shelves = MutableStateFlow<List<Shelf>>(emptyList())
     private val _summaryCache = mutableMapOf<String, String>()
 
@@ -551,13 +551,13 @@ class RealPaperRepository @Inject constructor(
             tokenManager.getSavedPapersJson()?.let { jsonStr ->
                 runCatching {
                     val set = json.decodeFromString(SetSerializer(String.serializer()), jsonStr)
-                    _savedPaperIds.value = set.toMutableSet()
+                    _savedPaperIds.value = set.toSet()
                 }
             }
             tokenManager.getShelvesJson()?.let { jsonStr ->
                 runCatching {
                     val shelves = json.decodeFromString(ListSerializer(Shelf.serializer()), jsonStr)
-                    _shelves.value = shelves
+                    _shelves.value = shelves.distinctBy { it.id }
                 }
             }
             // Local cache is only a warm start; the server is authoritative when reachable.
@@ -568,8 +568,8 @@ class RealPaperRepository @Inject constructor(
     /** Pulls shelves from the server. Returns false (leaving the cache intact) when offline. */
     private suspend fun refreshShelves(): Boolean = runCatching {
         val remote = api.getShelves().map { it.toDomain() }
-        _shelves.value = remote
-        _savedPaperIds.value = remote.flatMap { it.paperIds }.toMutableSet()
+        _shelves.value = remote.distinctBy { it.id }
+        _savedPaperIds.value = remote.flatMap { it.paperIds }.toSet()
         persistState()
         true
     }.getOrDefault(false)
@@ -583,16 +583,18 @@ class RealPaperRepository @Inject constructor(
         return runCatching {
             api.createShelf(CreateShelfDto(DEFAULT_SHELF_NAME, "Papers you saved")).toDomain()
         }.getOrNull()?.also { shelf ->
-            _shelves.value = _shelves.value + shelf
+            _shelves.value = (_shelves.value + shelf).distinctBy { it.id }
             persistState()
         }
     }
 
     private fun persistState() {
+        val savedPaperIdsSnapshot = _savedPaperIds.value.toSet()
+        val shelvesSnapshot = _shelves.value.toList()
         CoroutineScope(Dispatchers.IO).launch {
             runCatching {
-                tokenManager.saveSavedPapersJson(json.encodeToString(SetSerializer(String.serializer()), _savedPaperIds.value))
-                tokenManager.saveShelvesJson(json.encodeToString(ListSerializer(Shelf.serializer()), _shelves.value))
+                tokenManager.saveSavedPapersJson(json.encodeToString(SetSerializer(String.serializer()), savedPaperIdsSnapshot))
+                tokenManager.saveShelvesJson(json.encodeToString(ListSerializer(Shelf.serializer()), shelvesSnapshot))
             }
         }
     }
@@ -719,11 +721,11 @@ class RealPaperRepository @Inject constructor(
             return@flow
         }
         try {
-            val allPapers = api.getPapers(limit = 200).map { it.toDomain() }
+            val allPapers = api.getPapers(limit = 200).map { it.toDomain() }.distinctBy { it.id }
             emit(allPapers.filter { savedIds.contains(it.id) })
         } catch (e: Exception) {
             // Fallback: return fake papers that match saved IDs (offline mode)
-            emit(FakeDataSource.papers.filter { savedIds.contains(it.id) })
+            emit(FakeDataSource.papers.filter { savedIds.contains(it.id) }.distinctBy { it.id })
         }
     }
 
@@ -736,7 +738,7 @@ class RealPaperRepository @Inject constructor(
         val remote = runCatching { api.createShelf(CreateShelfDto(name, description)).toDomain() }
             .getOrNull()
         if (remote == null) return false
-        _shelves.value = _shelves.value + remote
+        _shelves.value = (_shelves.value + remote).distinctBy { it.id }
         persistState()
         return true
     }
@@ -748,9 +750,9 @@ class RealPaperRepository @Inject constructor(
         val shelf = current[idx]
         if (!shelf.paperIds.contains(paperId)) {
             current[idx] = shelf.copy(paperIds = shelf.paperIds + paperId)
-            _shelves.value = current
+            _shelves.value = current.distinctBy { it.id }
         }
-        _savedPaperIds.value = _savedPaperIds.value.toMutableSet().apply { add(paperId) }
+        _savedPaperIds.value = _savedPaperIds.value + paperId
         persistState()
         return runCatching { api.addPaperToShelf(shelfId, paperId); true }.getOrDefault(false)
     }
@@ -761,9 +763,9 @@ class RealPaperRepository @Inject constructor(
         if (idx < 0) return false
         val shelf = current[idx]
         current[idx] = shelf.copy(paperIds = shelf.paperIds.filter { it != paperId })
-        _shelves.value = current
+        _shelves.value = current.distinctBy { it.id }
         if (_shelves.value.none { it.paperIds.contains(paperId) }) {
-            _savedPaperIds.value = _savedPaperIds.value.toMutableSet().apply { remove(paperId) }
+            _savedPaperIds.value = _savedPaperIds.value - paperId
         }
         persistState()
         return runCatching { api.removePaperFromShelf(shelfId, paperId); true }.getOrDefault(false)
