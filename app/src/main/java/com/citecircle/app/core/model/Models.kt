@@ -24,6 +24,10 @@ data class User(
     val followerCount: Int = 0,
     val followingCount: Int = 0,
     val citationCount: Int = 0,
+    /** Citations on externally indexed work, from the ORCID/OpenAlex sync. */
+    val externalCitationCount: Int = 0,
+    val publicationCount: Int = 0,
+    val orcidVerified: Boolean = false,
     val isVerified: Boolean = false,
     val isFollowing: Boolean = false,
     val isConnected: Boolean = false,
@@ -220,6 +224,84 @@ data class Shelf(
     val name: String,
     val description: String = "",
     val paperIds: List<String> = emptyList()
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Publications (ORCID / OpenAlex bibliography)
+//
+// Distinct from Paper: a Paper is in-app content that lives in circles and the
+// library, a Publication mirrors an externally indexed work from OpenAlex.
+// ──────────────────────────────────────────────────────────────────────────────
+
+@Serializable
+data class Publication(
+    val id: String,
+    val title: String,
+    val abstract: String = "",
+    val doi: String = "",
+    val journal: String = "",
+    val year: Int? = null,
+    val citationCount: Int = 0,
+    val workType: String = "",
+    val isOpenAccess: Boolean = false,
+    val openAccessUrl: String = "",
+    val openAlexId: String = "",
+    val lastSyncedAt: Long = 0L,
+) {
+    /** Resolvable link to the work, preferring the OA copy when one exists. */
+    val externalUrl: String
+        get() = when {
+            openAccessUrl.isNotBlank() -> openAccessUrl
+            doi.isNotBlank() -> "https://doi.org/$doi"
+            else -> openAlexId
+        }
+}
+
+@Serializable
+data class Coauthor(
+    val openAlexAuthorId: String,
+    val displayName: String,
+    val orcidId: String = "",
+    val institution: String = "",
+    /** Non-null when this co-author is also a Cite Circle member. */
+    val userId: String? = null,
+    val sharedPublications: Int = 0,
+)
+
+enum class SyncStatus {
+    /** Never synced. */
+    IDLE,
+
+    /** A sync is in flight. */
+    RUNNING,
+
+    /** Paged out mid-bibliography; calling sync again resumes from the cursor. */
+    PARTIAL,
+
+    SUCCESS,
+    FAILED,
+}
+
+@Serializable
+data class OrcidSyncState(
+    val orcidId: String = "",
+    val status: SyncStatus = SyncStatus.IDLE,
+    val worksSynced: Int = 0,
+    val lastSuccessAt: Long? = null,
+    val lastError: String = "",
+    val nextEligibleAt: Long = 0L,
+) {
+    val hasSynced: Boolean get() = lastSuccessAt != null && lastSuccessAt > 0L
+    val isResumable: Boolean get() = status == SyncStatus.PARTIAL
+}
+
+/** Outcome of one sync run, surfaced to the user as a snackbar. */
+data class OrcidSyncResult(
+    val success: Boolean,
+    val worksSynced: Int = 0,
+    val totalAvailable: Int = 0,
+    val complete: Boolean = true,
+    val message: String = "",
 )
 
 // ──────────────────────────────────────────────────────────────────────────────

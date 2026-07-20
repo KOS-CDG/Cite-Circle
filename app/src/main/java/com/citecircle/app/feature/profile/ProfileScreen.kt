@@ -21,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -33,9 +34,12 @@ import coil.compose.AsyncImage
 import com.citecircle.app.core.data.PaperRepository
 import com.citecircle.app.core.data.UserRepository
 import com.citecircle.app.core.data.CircleRepository
+import com.citecircle.app.core.data.PublicationRepository
 import com.citecircle.app.core.designsystem.*
 import com.citecircle.app.core.model.Circle
+import com.citecircle.app.core.model.OrcidSyncState
 import com.citecircle.app.core.model.Paper
+import com.citecircle.app.core.model.Publication
 import com.citecircle.app.core.model.User
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -60,13 +64,48 @@ import kotlinx.coroutines.flow.asStateFlow
 class ProfileViewModel @Inject constructor(
     private val userRepository: UserRepository,
     private val paperRepository: PaperRepository,
-    private val circleRepository: CircleRepository
+    private val circleRepository: CircleRepository,
+    private val publicationRepository: PublicationRepository
 ) : ViewModel() {
 
     private val _user = userRepository.getCurrentUser()
 
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing = _isRefreshing.asStateFlow()
+
+    private val _publications = MutableStateFlow<List<Publication>>(emptyList())
+    val publications = _publications.asStateFlow()
+
+    val syncState = publicationRepository.getSyncState()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), OrcidSyncState())
+
+    /** One-shot sync outcome for the snackbar; cleared once shown. */
+    private val _syncMessage = MutableStateFlow<String?>(null)
+    val syncMessage = _syncMessage.asStateFlow()
+
+    init {
+        loadPublications()
+    }
+
+    private fun loadPublications() {
+        viewModelScope.launch {
+            publicationRepository.getPublications().collect { _publications.value = it }
+        }
+    }
+
+    fun syncPublications() {
+        viewModelScope.launch {
+            val result = publicationRepository.syncPublications()
+            _syncMessage.value = result.message.ifBlank {
+                if (result.success) "Publications up to date" else "Sync failed"
+            }
+            if (result.success) loadPublications()
+        }
+    }
+
+    fun consumeSyncMessage() {
+        _syncMessage.value = null
+    }
 
     val papers = _user.combine(paperRepository.getAllPapers()) { user, allPapers ->
         allPapers.filter { paper -> paper.authors.any { it.id == user.id } }
@@ -116,7 +155,22 @@ fun ProfileScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
+    val publications by viewModel.publications.collectAsState()
+    val syncState by viewModel.syncState.collectAsState()
+    val syncMessage by viewModel.syncMessage.collectAsState()
     var selectedTab by remember { mutableStateOf(0) }
+
+    val uriHandler = LocalUriHandler.current
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // Sync outcomes — including the actionable 400s (no ORCID, cooldown active) —
+    // surface here rather than being swallowed.
+    LaunchedEffect(syncMessage) {
+        syncMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.consumeSyncMessage()
+        }
+    }
 
     PullToRefreshBox(
         isRefreshing = isRefreshing,
@@ -348,7 +402,7 @@ fun ProfileScreen(
                     item {
                         Spacer(modifier = Modifier.height(20.dp))
                         CcTabRow(
-                            tabs = listOf("Papers", "Circles", "About"),
+                            tabs = listOf("Papers", "Publications", "Circles", "About"),
                             selectedIndex = selectedTab,
                             onTabSelected = { selectedTab = it },
                             modifier = Modifier.fillMaxWidth()
@@ -383,6 +437,42 @@ fun ProfileScreen(
                             }
                         }
                         1 -> {
+                            item {
+                                Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                                    OrcidSyncHeader(
+                                        orcidId = user.orcidId,
+                                        syncState = syncState,
+                                        publicationCount = publications.size,
+                                        totalCitations = publications.sumOf { it.citationCount },
+                                        onSync = { viewModel.syncPublications() },
+                                    )
+                                }
+                            }
+
+                            if (publications.isEmpty()) {
+                                item {
+                                    CcEmptyState(
+                                        emoji = "🔬",
+                                        title = if (user.orcidId.isBlank()) "No ORCID linked" else "No publications yet",
+                                        subtitle = if (user.orcidId.isBlank()) {
+                                            "Add your ORCID iD in Edit Profile, then sync to import your indexed work."
+                                        } else {
+                                            "Tap Sync to pull your publications and citation counts from OpenAlex."
+                                        }
+                                    )
+                                }
+                            } else {
+                                items(publications, key = { it.id }) { publication ->
+                                    Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                                        PublicationCard(
+                                            publication = publication,
+                                            onOpen = { url -> uriHandler.openUri(url) },
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        2 -> {
                             if (profileState.circles.isEmpty()) {
                                 item {
                                     CcEmptyState(
@@ -411,7 +501,7 @@ fun ProfileScreen(
                                 }
                             }
                         }
-                        2 -> {
+                        3 -> {
                             item {
                                 Column(
                                     modifier = Modifier
@@ -434,6 +524,11 @@ fun ProfileScreen(
                 }
             }
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
     }
 }
 

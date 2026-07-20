@@ -46,8 +46,58 @@ data class UserDto(
     @SerialName("follower_count") val followerCount: Int = 0,
     @SerialName("following_count") val followingCount: Int = 0,
     @SerialName("citation_count") val citationCount: Int = 0,
+    @SerialName("external_citation_count") val externalCitationCount: Int = 0,
+    @SerialName("publication_count") val publicationCount: Int = 0,
+    @SerialName("orcid_verified") val orcidVerified: Boolean = false,
     @SerialName("is_verified") val isVerified: Boolean = false,
     val interests: List<String> = emptyList(),
+)
+
+@Serializable
+data class PublicationDto(
+    val id: String,
+    val title: String,
+    val abstract: String = "",
+    val doi: String = "",
+    val journal: String = "",
+    @SerialName("publication_year") val publicationYear: Int? = null,
+    @SerialName("citation_count") val citationCount: Int = 0,
+    @SerialName("work_type") val workType: String = "",
+    @SerialName("is_open_access") val isOpenAccess: Boolean = false,
+    @SerialName("open_access_url") val openAccessUrl: String = "",
+    @SerialName("openalex_id") val openAlexId: String = "",
+    @SerialName("last_synced_at") val lastSyncedAt: Long = 0,
+)
+
+@Serializable
+data class CoauthorDto(
+    @SerialName("openalex_author_id") val openAlexAuthorId: String,
+    @SerialName("display_name") val displayName: String,
+    @SerialName("orcid_id") val orcidId: String = "",
+    val institution: String = "",
+    @SerialName("user_id") val userId: String? = null,
+    @SerialName("shared_publications") val sharedPublications: Int = 0,
+)
+
+@Serializable
+data class OrcidSyncResultDto(
+    val status: String,
+    @SerialName("works_synced") val worksSynced: Int = 0,
+    @SerialName("total_available") val totalAvailable: Int = 0,
+    val complete: Boolean = true,
+    @SerialName("synced_at") val syncedAt: Long = 0,
+    val message: String = "",
+)
+
+@Serializable
+data class OrcidSyncStateDto(
+    @SerialName("user_id") val userId: String,
+    @SerialName("orcid_id") val orcidId: String = "",
+    val status: String = "IDLE",
+    @SerialName("works_synced") val worksSynced: Int = 0,
+    @SerialName("last_success_at") val lastSuccessAt: Long? = null,
+    @SerialName("last_error") val lastError: String = "",
+    @SerialName("next_eligible_at") val nextEligibleAt: Long = 0,
 )
 
 @Serializable
@@ -281,6 +331,33 @@ interface CiteCircleApi {
 
     @POST("users/{userId}/decline")
     suspend fun declineConnection(@Path("userId") userId: String): ConnectionResponseDto
+
+    // ── Publications (ORCID / OpenAlex) ───────────────────────────────────────
+
+    @POST("users/me/orcid/sync")
+    suspend fun syncMyPublications(@Query("force") force: Boolean = false): OrcidSyncResultDto
+
+    @GET("users/me/orcid/state")
+    suspend fun getMySyncState(): OrcidSyncStateDto
+
+    @GET("users/me/publications")
+    suspend fun getMyPublications(
+        @Query("limit") limit: Int = 50,
+        @Query("offset") offset: Int = 0,
+    ): List<PublicationDto>
+
+    @GET("users/me/coauthors")
+    suspend fun getMyCoauthors(): List<CoauthorDto>
+
+    @GET("users/{userId}/publications")
+    suspend fun getUserPublications(
+        @Path("userId") userId: String,
+        @Query("limit") limit: Int = 50,
+        @Query("offset") offset: Int = 0,
+    ): List<PublicationDto>
+
+    @GET("users/{userId}/coauthors")
+    suspend fun getUserCoauthors(@Path("userId") userId: String): List<CoauthorDto>
 
     // ── Posts ─────────────────────────────────────────────────────────────────
 

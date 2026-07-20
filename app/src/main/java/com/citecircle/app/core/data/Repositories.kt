@@ -85,6 +85,19 @@ interface NotificationRepository {
     suspend fun dismissNotification(notifId: String)
 }
 
+interface PublicationRepository {
+    /** Publications for a user; pass null for the signed-in user. */
+    fun getPublications(userId: String? = null): Flow<List<Publication>>
+    fun getCoauthors(userId: String? = null): Flow<List<Coauthor>>
+    fun getSyncState(): Flow<OrcidSyncState>
+
+    /**
+     * Pull the signed-in user's bibliography from OpenAlex via their ORCID iD.
+     * Set [force] to bypass the server-side refresh cooldown.
+     */
+    suspend fun syncPublications(force: Boolean = false): OrcidSyncResult
+}
+
 interface AiReviewRepository {
     /** Returns staged progress messages, then the final report */
     suspend fun reviewPaper(draft: PaperDraft): AiReviewReport

@@ -41,8 +41,44 @@ private fun UserDto.toDomain() = User(
     followerCount = followerCount,
     followingCount = followingCount,
     citationCount = citationCount,
+    externalCitationCount = externalCitationCount,
+    publicationCount = publicationCount,
+    orcidVerified = orcidVerified,
     isVerified = isVerified,
     interests = interests,
+)
+
+private fun PublicationDto.toDomain() = Publication(
+    id = id,
+    title = title,
+    abstract = abstract,
+    doi = doi,
+    journal = journal,
+    year = publicationYear,
+    citationCount = citationCount,
+    workType = workType,
+    isOpenAccess = isOpenAccess,
+    openAccessUrl = openAccessUrl,
+    openAlexId = openAlexId,
+    lastSyncedAt = lastSyncedAt,
+)
+
+private fun CoauthorDto.toDomain() = Coauthor(
+    openAlexAuthorId = openAlexAuthorId,
+    displayName = displayName,
+    orcidId = orcidId,
+    institution = institution,
+    userId = userId,
+    sharedPublications = sharedPublications,
+)
+
+private fun OrcidSyncStateDto.toDomain() = OrcidSyncState(
+    orcidId = orcidId,
+    status = runCatching { SyncStatus.valueOf(status) }.getOrDefault(SyncStatus.IDLE),
+    worksSynced = worksSynced,
+    lastSuccessAt = lastSuccessAt,
+    lastError = lastError,
+    nextEligibleAt = nextEligibleAt,
 )
 
 private fun PostDto.toDomain(author: User = User(id = authorId, name = "")) = Post(
@@ -1154,4 +1190,83 @@ class RealSearchRepository @Inject constructor(
     override suspend fun removeRecentSearch(query: String) {
         _recentSearches.value = _recentSearches.value.filter { it != query }
     }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Publications (ORCID / OpenAlex sync)
+// ──────────────────────────────────────────────────────────────────────────────
+
+class RealPublicationRepository @Inject constructor(
+    private val api: CiteCircleApi,
+) : PublicationRepository {
+
+    private val _syncState = MutableStateFlow(OrcidSyncState())
+
+    override fun getPublications(userId: String?): Flow<List<Publication>> = flow {
+        try {
+            val dtos = if (userId == null) api.getMyPublications() else api.getUserPublications(userId)
+            emit(dtos.map { it.toDomain() })
+        } catch (e: Exception) {
+            emit(emptyList())
+        }
+    }
+
+    override fun getCoauthors(userId: String?): Flow<List<Coauthor>> = flow {
+        try {
+            val dtos = if (userId == null) api.getMyCoauthors() else api.getUserCoauthors(userId)
+            emit(dtos.map { it.toDomain() })
+        } catch (e: Exception) {
+            emit(emptyList())
+        }
+    }
+
+    override fun getSyncState(): Flow<OrcidSyncState> = _syncState.asStateFlow().onStart {
+        try {
+            _syncState.value = api.getMySyncState().toDomain()
+        } catch (e: Exception) {
+            // Keep the last known state; the screen still renders a sync button.
+        }
+    }
+
+    override suspend fun syncPublications(force: Boolean): OrcidSyncResult {
+        _syncState.value = _syncState.value.copy(status = SyncStatus.RUNNING, lastError = "")
+        return try {
+            val result = api.syncMyPublications(force)
+            refreshState()
+            OrcidSyncResult(
+                success = true,
+                worksSynced = result.worksSynced,
+                totalAvailable = result.totalAvailable,
+                complete = result.complete,
+                message = result.message,
+            )
+        } catch (e: Exception) {
+            val message = e.serverDetail() ?: "Could not sync publications. Check your connection."
+            _syncState.value = _syncState.value.copy(status = SyncStatus.FAILED, lastError = message)
+            OrcidSyncResult(success = false, message = message)
+        }
+    }
+
+    private suspend fun refreshState() {
+        runCatching { api.getMySyncState().toDomain() }.onSuccess { _syncState.value = it }
+    }
+}
+
+/**
+ * Pulls the `detail` string out of a FastAPI error body.
+ *
+ * The sync endpoint rejects with actionable 400s — no ORCID on the profile, a
+ * malformed iD, an active cooldown — and those messages are worth showing
+ * verbatim rather than replacing with a generic failure.
+ */
+private fun Exception.serverDetail(): String? {
+    val http = this as? retrofit2.HttpException ?: return null
+    val body = runCatching { http.response()?.errorBody()?.string() }.getOrNull() ?: return null
+    return runCatching {
+        Json { ignoreUnknownKeys = true }
+            .parseToJsonElement(body)
+            .let { it as? kotlinx.serialization.json.JsonObject }
+            ?.get("detail")
+            ?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
+    }.getOrNull()
 }
