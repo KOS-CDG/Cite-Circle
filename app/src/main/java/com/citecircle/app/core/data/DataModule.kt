@@ -96,7 +96,7 @@ abstract class RepositoryModule {
     abstract fun bindNotificationRepository(impl: RealNotificationRepository): NotificationRepository
 
     @Binds @Singleton
-    abstract fun bindAiReviewRepository(impl: RealAiReviewRepository): AiReviewRepository
+    abstract fun bindAiReviewRepository(impl: FireworksAiReviewRepository): AiReviewRepository
 
     @Binds @Singleton
     abstract fun bindSearchRepository(impl: RealSearchRepository): SearchRepository

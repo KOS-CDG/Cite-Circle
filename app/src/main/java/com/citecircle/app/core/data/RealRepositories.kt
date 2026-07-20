@@ -961,6 +961,7 @@ class RealMessageRepository @Inject constructor(
     override fun getMessagesForConversation(convId: String): Flow<List<Message>> = flow {
         if (convId == "conv_ai") {
             ensureAiMessagesLoaded()
+            emit(_aiMessages.value)
             try {
                 val remoteMsgs = api.getMessages(convId).map { it.toDomain() }
                 if (remoteMsgs.isNotEmpty()) {
@@ -969,10 +970,8 @@ class RealMessageRepository @Inject constructor(
                         tokenManager.saveAiMessagesJson(json.encodeToString(ListSerializer(Message.serializer()), remoteMsgs))
                     }
                     emit(remoteMsgs)
-                    return@flow
                 }
             } catch (_: Exception) {}
-            emit(_aiMessages.value)
         } else {
             try {
                 emit(api.getMessages(convId).map { it.toDomain() })
@@ -983,14 +982,33 @@ class RealMessageRepository @Inject constructor(
     override suspend fun sendMessage(convId: String, content: String): Message {
         return try {
             val dtos = api.sendMessage(convId, MessageCreateDto(content))
-            dtos.first().toDomain()
+            val domainMsgs = dtos.map { it.toDomain() }
+            if (convId == "conv_ai" && domainMsgs.isNotEmpty()) {
+                ensureAiMessagesLoaded()
+                val current = _aiMessages.value.filterNot { it.id.startsWith("msg_optimistic_") }
+                val updated = (current + domainMsgs).distinctBy { it.id }
+                _aiMessages.value = updated
+                runCatching {
+                    tokenManager.saveAiMessagesJson(json.encodeToString(ListSerializer(Message.serializer()), updated))
+                }
+            }
+            domainMsgs.first()
         } catch (e: Exception) {
-            Message(
+            val fallbackMsg = Message(
                 id = "msg_${System.currentTimeMillis()}",
                 senderId = FakeDataSource.currentUser.id,
                 content = content,
                 timestamp = System.currentTimeMillis()
             )
+            if (convId == "conv_ai") {
+                ensureAiMessagesLoaded()
+                val updated = _aiMessages.value + fallbackMsg
+                _aiMessages.value = updated
+                runCatching {
+                    tokenManager.saveAiMessagesJson(json.encodeToString(ListSerializer(Message.serializer()), updated))
+                }
+            }
+            fallbackMsg
         }
     }
 
