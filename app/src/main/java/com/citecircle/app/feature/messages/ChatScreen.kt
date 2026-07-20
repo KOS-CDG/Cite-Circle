@@ -276,10 +276,10 @@ fun ChatScreen(
     val isAiChat = (state as? ChatScreenState.Success)?.recipient?.id == "ai_copilot"
 
     val samplePromptChips = listOf(
-        "💡 Review my abstract",
-        "📊 Explain P-value vs Effect Size",
-        "✍️ Tips for literature review",
-        "📝 How to write research methodology"
+        " Review my abstract",
+        " Explain P-value vs Effect Size",
+        "️ Tips for literature review",
+        " How to write research methodology"
     )
 
     if (showClearDialog) {

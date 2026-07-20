@@ -66,11 +66,29 @@
       "mcp__mongodb__atlas-list-projects",
       "Bash(python3 -m py_compile main.py)",
       "Bash(git commit -q -m 'fix: keep AI review response when MongoDB persistence fails *)",
-      "Bash(curl -s -m 150 -w '\\\\nHTTP:%{http_code}\\\\n' -X POST https://cite-circle.onrender.com/papers/review -H \"Authorization: Bearer test\" -H \"Content-Type: application/json\" -d '{\"title\": \"Situated Cognition in AI-Augmented Knowledge Work\", \"abstract\": \"As AI writing and analysis tools become embedded in research workflows, questions arise about cognitive load and epistemic agency among academic researchers.\"}')"
+      "Bash(curl -s -m 150 -w '\\\\nHTTP:%{http_code}\\\\n' -X POST https://cite-circle.onrender.com/papers/review -H \"Authorization: Bearer test\" -H \"Content-Type: application/json\" -d '{\"title\": \"Situated Cognition in AI-Augmented Knowledge Work\", \"abstract\": \"As AI writing and analysis tools become embedded in research workflows, questions arise about cognitive load and epistemic agency among academic researchers.\"}')",
+      "Bash(python3 -m py_compile backend/main.py backend/schemas.py backend/database.py)",
+      "Bash(timeout 900 ./gradlew test --console=plain)",
+      "Bash(git check-ignore *)",
+      "Bash(curl *)",
+      "Bash(git -C /home/dhale/Downloads/Projects/Projects/Research_APP/backend branch --show-current)",
+      "Bash(git -C /home/dhale/Downloads/Projects/Projects/Research_APP/backend diff --stat)",
+      "Bash(git -C /home/dhale/Downloads/Projects/Projects/Research_APP/backend log --oneline -3)",
+      "Bash(git -C /home/dhale/Downloads/Projects/Projects/Research_APP/backend diff -U0 main.py)",
+      "Bash(git diff *)",
+      "Bash(awk '/^@@ -\\(70|263|267|277|297|300|311|319|399|401|413|416\\) /,0')",
+      "Bash(python3 -m py_compile main.py schemas.py database.py)",
+      "Bash(git commit *)",
+      "Bash(git *)",
+      "Bash(python3 -c \"import json,sys; t=sys.stdin.read\\(\\); print\\(t[-600:]\\)\")"
     ]
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
-    "supabase"
+    "github",
+    "neon",
+    "render",
+    "cloudinary-asset-management",
+    "mongodb"
   ]
 }
