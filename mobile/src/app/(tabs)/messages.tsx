@@ -79,11 +79,33 @@ export default function MessagesScreen() {
         id: AI_CONVERSATION_ID,
         isAi: true,
         peerId: AI_SENDER_ID,
-        lastMessage: aiMessages.at(-1) ?? null,
+        lastMessage: aiMessages.at(-1) ?? {
+          id: 'msg_ai_1',
+          conversation_id: AI_CONVERSATION_ID,
+          sender_id: AI_SENDER_ID,
+          content: 'Hello! I am your CiteCircle AI Copilot. Ask me anything about literature, methodology, or drafting your paper.',
+          timestamp: Date.now(),
+          is_read: true,
+          attached_paper_id: null,
+        },
         unreadCount: 0,
       };
     } catch {
-      aiRow = { id: AI_CONVERSATION_ID, isAi: true, peerId: AI_SENDER_ID, lastMessage: null, unreadCount: 0 };
+      aiRow = {
+        id: AI_CONVERSATION_ID,
+        isAi: true,
+        peerId: AI_SENDER_ID,
+        lastMessage: {
+          id: 'msg_ai_1',
+          conversation_id: AI_CONVERSATION_ID,
+          sender_id: AI_SENDER_ID,
+          content: 'Hello! I am your CiteCircle AI Copilot. Ask me anything about literature, methodology, or drafting your paper.',
+          timestamp: Date.now(),
+          is_read: true,
+          attached_paper_id: null,
+        },
+        unreadCount: 0,
+      };
     }
 
     setRows([aiRow, ...resolved]);

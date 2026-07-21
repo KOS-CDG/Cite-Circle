@@ -1,8 +1,8 @@
+import { useEffect } from 'react';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider as NavigationThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useColorScheme } from 'react-native';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { AppThemeProvider } from '@/components/ui/theme-provider';
 import { useAuthStore } from '@/store/auth-store';
 
@@ -14,10 +14,13 @@ export default function RootLayout() {
   const needsProfileSetup = useAuthStore((state) => state.needsProfileSetup);
   const showTabs = isAuthenticated && !needsProfileSetup;
 
+  useEffect(() => {
+    SplashScreen.hideAsync().catch(() => {});
+  }, []);
+
   return (
     <AppThemeProvider>
       <NavigationThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <AnimatedSplashOverlay />
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Protected guard={!showTabs}>
             <Stack.Screen name="(auth)" />
@@ -37,3 +40,4 @@ export default function RootLayout() {
     </AppThemeProvider>
   );
 }
+

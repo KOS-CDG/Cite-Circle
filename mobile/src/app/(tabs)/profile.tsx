@@ -14,9 +14,29 @@ import type { EndorsePostResult, OrcidSyncResult, OrcidSyncState, Post, Publicat
 
 type Tab = 'posts' | 'publications';
 
+const MOCK_SCHOLAR_USER: User = {
+  id: 'me',
+  name: 'Dr. Alexander Wright',
+  avatar_url: '',
+  role: 'RESEARCHER',
+  institution: 'Stanford AI Institute',
+  field_of_study: 'Artificial Intelligence & Multi-Agent Systems',
+  bio: 'Focusing on LLM reasoning, neural-symbolic integration, and autonomous scientific discovery systems.',
+  orcid_id: '0000-0003-4912-8800',
+  follower_count: 1850,
+  following_count: 340,
+  citation_count: 4230,
+  external_citation_count: 3800,
+  publication_count: 18,
+  orcid_verified: true,
+  is_verified: true,
+  interests: ['Multi-Agent AI', 'Neural Reasoning', 'Automated Science'],
+};
+
 export default function ProfileScreen() {
   const { colors } = useAppTheme();
-  const user = useAuthStore((state) => state.user);
+  const authUser = useAuthStore((state) => state.user);
+  const user = authUser || MOCK_SCHOLAR_USER;
   const setUser = useAuthStore((state) => state.setUser);
   const signOut = useAuthStore((state) => state.signOut);
 
@@ -28,16 +48,20 @@ export default function ProfileScreen() {
   const [isSyncing, setIsSyncing] = useState(false);
 
   const load = useCallback(async () => {
-    if (!user) return;
-    const [feed, pubs, sync] = await Promise.all([
-      apiClient.get<Post[]>('/posts?limit=100'),
-      apiClient.get<Publication[]>('/users/me/publications').catch(() => []),
-      apiClient.get<OrcidSyncState>('/users/me/orcid/state').catch(() => null),
-    ]);
-    setPosts(feed.filter((post) => post.author_id === user.id));
-    setPublications(pubs);
-    setSyncState(sync);
-  }, [user]);
+    try {
+      const [feed, pubs, sync] = await Promise.all([
+        apiClient.get<Post[]>('/posts?limit=100').catch(() => []),
+        apiClient.get<Publication[]>('/users/me/publications').catch(() => []),
+        apiClient.get<OrcidSyncState>('/users/me/orcid/state').catch(() => null),
+      ]);
+      setPosts(feed.filter((post) => post.author_id === user.id));
+      setPublications(pubs);
+      setSyncState(sync);
+    } catch {
+      setPosts([]);
+      setPublications([]);
+    }
+  }, [user.id]);
 
   useEffect(() => {
     setIsLoading(true);

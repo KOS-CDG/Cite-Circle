@@ -31,40 +31,43 @@ export default function SplashScreen() {
     let cancelled = false;
 
     async function bootstrap() {
-      setProgress(0.35);
-      await sleep(400);
+      setProgress(0.4);
+      await sleep(150);
       if (cancelled) return;
       setStageText('Syncing research circles & papers...');
-      setProgress(0.75);
-      await sleep(400);
+      setProgress(0.8);
+      await sleep(150);
       if (cancelled) return;
       setStageText('Initializing AI Copilot engine...');
 
       let authenticated = false;
-      const token = await getAuthToken();
-      if (token) {
-        try {
-          const user = await apiClient.get<User>('/users/me');
-          if (!cancelled) {
-            setUser(user);
+      try {
+        const token = await getAuthToken();
+        if (token) {
+          const userPromise = apiClient.get<User>('/users/me');
+          const timeoutPromise = new Promise<null>((r) => setTimeout(() => r(null), 1200));
+          const user = await Promise.race([userPromise, timeoutPromise]);
+          if (user && !cancelled) {
+            setUser(user as User);
             authenticated = true;
+          } else if (!cancelled && user === null) {
+            // API timeout occurred — clear token gracefully
+            await clearAuthToken();
           }
-        } catch {
-          await clearAuthToken();
         }
+      } catch {
+        await clearAuthToken().catch(() => {});
       }
 
       if (cancelled) return;
       setProgress(1);
       setStageText('Workspace ready!');
-      await sleep(300);
+      await sleep(150);
       if (cancelled) return;
 
       if (!authenticated) {
         router.replace('/(auth)/onboarding');
       }
-      // If authenticated, the root layout's Stack.Protected guard reacts to
-      // setUser() above and swaps to (tabs) on its own — no navigation needed.
     }
 
     bootstrap();
