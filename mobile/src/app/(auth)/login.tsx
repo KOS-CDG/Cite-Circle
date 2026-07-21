@@ -55,15 +55,20 @@ export default function LoginScreen() {
       const mockAdminUser: User = {
         id: 'user_dev_admin',
         name: 'Dr. Admin Scholar',
-        email: 'admin@citecircle.edu',
+        avatar_url: '',
         role: 'RESEARCHER',
         institution: 'Cite-Circle AI Lab',
-        bio: 'Lead Administrator & Senior Researcher at Cite-Circle.',
         field_of_study: 'Artificial Intelligence & Machine Learning',
-        citation_count: 342,
+        bio: 'Lead Administrator & Senior Researcher at Cite-Circle.',
+        orcid_id: '0000-0002-1825-0097',
         follower_count: 128,
         following_count: 45,
+        citation_count: 342,
+        external_citation_count: 120,
+        publication_count: 15,
+        orcid_verified: true,
         is_verified: true,
+        interests: ['Machine Learning', 'Computer Vision', 'NLP', 'Neural Networks'],
       };
       setUser(mockAdminUser);
     } catch {

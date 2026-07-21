@@ -60,12 +60,20 @@ export default function RegisterScreen() {
             {
               id: auth.user_id || 'user_new',
               name: name.trim() || 'Scholar',
+              avatar_url: '',
               role: selectedRole,
               institution: institution.trim(),
+              field_of_study: '',
               bio: '',
-              citation_count: 0,
+              orcid_id: '',
               follower_count: 0,
               following_count: 0,
+              citation_count: 0,
+              external_citation_count: 0,
+              publication_count: 0,
+              orcid_verified: false,
+              is_verified: false,
+              interests: [],
             },
             { needsProfileSetup: true }
           );
