@@ -50,10 +50,30 @@ export default function RegisterScreen() {
         field_of_study: '',
       };
       const auth = await apiClient.post<AuthResponse>('/auth/signup', body);
-      await setAuthToken(auth.access_token);
-      const user = await apiClient.get<User>('/users/me');
-      setUser(user, { needsProfileSetup: true });
-      router.replace('/(auth)/profile-setup');
+      if (auth.access_token) {
+        await setAuthToken(auth.access_token);
+        try {
+          const user = await apiClient.get<User>('/users/me');
+          setUser(user, { needsProfileSetup: true });
+        } catch {
+          setUser(
+            {
+              id: auth.user_id || 'user_new',
+              name: name.trim() || 'Scholar',
+              role: selectedRole,
+              institution: institution.trim(),
+              bio: '',
+              citation_count: 0,
+              follower_count: 0,
+              following_count: 0,
+            },
+            { needsProfileSetup: true }
+          );
+        }
+        router.replace('/(auth)/profile-setup');
+      } else {
+        setFormError('Account created! Please check your email to confirm your account, then log in.');
+      }
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : 'Could not create your account. Please try again.');
     } finally {

@@ -34,7 +34,18 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   if (!response.ok) {
     const text = await response.text().catch(() => response.statusText);
-    throw new ApiError(response.status, text);
+    let errorMessage = text;
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed.detail === 'string') {
+        errorMessage = parsed.detail;
+      } else if (parsed && Array.isArray(parsed.detail)) {
+        errorMessage = parsed.detail.map((d: { msg?: string }) => d.msg || '').filter(Boolean).join(', ');
+      }
+    } catch {
+      // Keep raw text if not valid JSON
+    }
+    throw new ApiError(response.status, errorMessage);
   }
 
   if (response.status === 204) {
