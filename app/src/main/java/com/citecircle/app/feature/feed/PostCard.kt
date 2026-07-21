@@ -229,8 +229,8 @@ fun PostCard(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                // Post content body
-                Text(
+                // Post content body — renders LaTeX and fenced code when present
+                ScholarlyText(
                     text = post.content,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,

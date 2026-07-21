@@ -139,6 +139,22 @@ fun FormattedChatMessageText(
     color: Color,
     modifier: Modifier = Modifier
 ) {
+    // Math and fenced code need the scholarly renderer; everything else keeps the
+    // existing markdown path, which the AI copilot's bold/heading output relies on.
+    val needsRichRendering = remember(text) {
+        ScholarlyContent.containsMath(text) || text.contains("```")
+    }
+
+    if (needsRichRendering) {
+        ScholarlyText(
+            text = text,
+            color = color,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = modifier
+        )
+        return
+    }
+
     val annotatedString = remember(text) {
         parseMarkdownToAnnotatedString(text)
     }

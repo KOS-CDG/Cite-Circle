@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Debug-only harness for ScholarlyText; excluded from release builds. -->
+        <activity
+            android:name="com.citecircle.app.debug.ScholarlyTextDemoActivity"
+            android:exported="true"
+            android:theme="@style/Theme.CiteCircle" />
+    </application>
+</manifest>

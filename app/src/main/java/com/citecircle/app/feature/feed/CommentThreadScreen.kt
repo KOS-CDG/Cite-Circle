@@ -402,7 +402,7 @@ fun CommentRowItem(
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            Text(
+            ScholarlyText(
                 text = comment.content,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface
