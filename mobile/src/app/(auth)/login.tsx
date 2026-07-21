@@ -46,6 +46,33 @@ export default function LoginScreen() {
     login(email.trim(), password);
   }
 
+  async function handleDevBypassLogin() {
+    setIsLoading(true);
+    try {
+      const devJwt =
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyX2Rldl9hZG1pbiIsImVtYWlsIjoiYWRtaW5AY2l0ZWNpcmNsZS5lZHUiLCJuYW1lIjoiRHIuIEFkbWluIFNjaG9sYXIifQ.dev_signature';
+      await setAuthToken(devJwt);
+      const mockAdminUser: User = {
+        id: 'user_dev_admin',
+        name: 'Dr. Admin Scholar',
+        email: 'admin@citecircle.edu',
+        role: 'RESEARCHER',
+        institution: 'Cite-Circle AI Lab',
+        bio: 'Lead Administrator & Senior Researcher at Cite-Circle.',
+        field_of_study: 'Artificial Intelligence & Machine Learning',
+        citation_count: 342,
+        follower_count: 128,
+        following_count: 45,
+        is_verified: true,
+      };
+      setUser(mockAdminUser);
+    } catch {
+      setFormError('Bypass login failed. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   return (
     <View className="flex-1 bg-academic-paper dark:bg-[#15151A]">
       <SafeAreaView className="flex-1">
@@ -77,6 +104,14 @@ export default function LoginScreen() {
           {formError ? <Text className="text-sm text-red-500">{formError}</Text> : null}
 
           <Button label="Log In" isLoading={isLoading} onPress={handleSubmit} className="w-full" />
+
+          <Button
+            label="⚡ Bypass Login (Dev / Admin Mode)"
+            variant="secondary"
+            isLoading={isLoading}
+            onPress={handleDevBypassLogin}
+            className="w-full border-amber-500/50 bg-amber-500/10 text-amber-600 dark:bg-amber-500/20"
+          />
 
           <Pressable onPress={() => router.push('/(auth)/register')} className="py-2">
             <Text className="text-base font-semibold text-academic-maroon dark:text-[#C6635E]">
