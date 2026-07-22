@@ -31,28 +31,22 @@ export default function SplashScreen() {
     let cancelled = false;
 
     async function bootstrap() {
-      setProgress(0.4);
-      await sleep(150);
+      setProgress(0.5);
       if (cancelled) return;
-      setStageText('Syncing research circles & papers...');
-      setProgress(0.8);
-      await sleep(150);
-      if (cancelled) return;
-      setStageText('Initializing AI Copilot engine...');
 
       let authenticated = false;
       try {
         const token = await getAuthToken();
         if (token) {
           const userPromise = apiClient.get<User>('/users/me');
-          const timeoutPromise = new Promise<null>((r) => setTimeout(() => r(null), 1200));
+          const timeoutPromise = new Promise<null>((r) => setTimeout(() => r(null), 400));
           const user = await Promise.race([userPromise, timeoutPromise]);
           if (user && !cancelled) {
             setUser(user as User);
             authenticated = true;
           } else if (!cancelled && user === null) {
-            // API timeout occurred — clear token gracefully
-            await clearAuthToken();
+            // Fast fallback if backend unreachable
+            await clearAuthToken().catch(() => {});
           }
         }
       } catch {
@@ -61,9 +55,6 @@ export default function SplashScreen() {
 
       if (cancelled) return;
       setProgress(1);
-      setStageText('Workspace ready!');
-      await sleep(150);
-      if (cancelled) return;
 
       if (!authenticated) {
         router.replace('/(auth)/onboarding');
