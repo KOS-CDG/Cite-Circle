@@ -24,74 +24,85 @@ class FireworksAiReviewRepository @Inject constructor(
 
     override suspend fun reviewPaper(draft: PaperDraft): AiReviewReport {
         try {
-            _progress.value = AiReviewStage.InProgress("Reading manuscript draft...", 1, 6)
-            delay(500)
+            // Stage 1: Parsing manuscript sections & references...
+            _progress.value = AiReviewStage.InProgress("Parsing manuscript sections & references...", 1, 5)
+            delay(400)
 
-            _progress.value = AiReviewStage.InProgress("Analyzing document abstract...", 2, 6)
-            delay(500)
+            // Stage 2: Evaluating ethical hard gates...
+            _progress.value = AiReviewStage.InProgress("Evaluating ethical hard gates...", 2, 5)
+            delay(400)
 
-            _progress.value = AiReviewStage.InProgress("Contacting Fireworks.ai service...", 3, 6)
+            // Stage 3: Analyzing structure & citations via Fireworks.ai...
+            _progress.value = AiReviewStage.InProgress("Analyzing structure & citations via Fireworks.ai...", 3, 5)
 
-            val modelId = "accounts/fireworks/models/deepseek-v4-pro"
+            val modelId = "accounts/fireworks/models/llama-v3p1-70b-instruct"
             val systemPrompt = """
-                You are an expert peer reviewer for academic manuscripts. Your job is to critique the provided title and abstract of a research draft.
-                Analyze the draft on five key criteria:
-                1. Structure (logic flow, completeness)
-                2. Citations (relevancy, background depth)
-                3. Clarity (readability, scientific rigor)
-                4. Originality (novelty, significance)
+                You are an expert peer reviewer for academic manuscripts evaluating a submission against PUBLICATION_STANDARD.md.
+                Analyze the draft across four scored criteria (0-100):
+                1. Structure (IMRaD integrity, weight 30%)
+                2. Citations (relevancy, APA 7 formatting, weight 25%)
+                3. Clarity (readability, statistical notation, weight 20%)
+                4. Originality (novelty, contribution, weight 25%)
+
+                Also evaluate Ethical Hard Gates G4 (Ethics/IRB), G5 (Consent), G6 (Data availability), G7 (COI), G10 (Reference list).
                 
                 You must output your complete analysis as a valid JSON object matching the following schema:
                 {
-                  "score": integer (overall readiness score between 0 and 100),
-                  "structure": integer (score between 0 and 100),
-                  "citations": integer (score between 0 and 100),
-                  "clarity": integer (score between 0 and 100),
-                  "originality": integer (score between 0 and 100),
+                  "score": integer (overall score 0-100),
+                  "structure": integer (0-100),
+                  "citations": integer (0-100),
+                  "clarity": integer (0-100),
+                  "originality": integer (0-100),
+                  "verdict": "ACCEPT" | "MINOR_REVISIONS" | "MAJOR_REVISIONS" | "REJECT",
+                  "summary": "Concise executive summary.",
+                  "strengths": ["string"],
+                  "weaknesses": ["string"],
                   "suggestions": [
                     {
                       "id": "s1",
                       "section": "Abstract",
                       "text": "Detailed, specific, actionable feedback text.",
                       "severity": "MODERATE",
+                      "passageQuote": "Specific passage quoted if available.",
                       "isAddressed": false
                     }
-                  ]
+                  ],
+                  "deskRejected": false
                 }
-                Provide between 3 to 6 suggestions. Section must be one of: Abstract, Related Work, Methodology, Results, Discussion, Conclusion.
-                Severity must be one of: MINOR, MODERATE, NEEDS_ATTENTION.
-                Do not include any explanation, markdown packaging, or text outside the JSON object itself.
+                Provide 3 to 6 suggestions. Severity must be MINOR, MODERATE, or NEEDS_ATTENTION.
+                Do not include markdown packaging or text outside the JSON object.
             """.trimIndent()
 
-            val userContent = """
-                Paper Title: ${draft.title}
-                Abstract Summary: ${draft.abstract}
-            """.trimIndent()
+            val fullContent = buildString {
+                append("Paper Title: ").append(draft.title).append("\n")
+                if (draft.abstract.isNotBlank()) append("Abstract: ").append(draft.abstract).append("\n")
+                if (draft.fullText.isNotBlank()) append("Full Text: ").append(draft.fullText).append("\n")
+                if (draft.sections.isNotEmpty()) {
+                    append("Sections:\n")
+                    draft.sections.forEach { (sec, body) ->
+                        append("=== ").append(sec).append(" ===\n").append(body).append("\n")
+                    }
+                }
+            }
 
             val request = ChatCompletionRequest(
                 model = modelId,
                 messages = listOf(
                     ChatMessage(role = "system", content = systemPrompt),
-                    ChatMessage(role = "user", content = userContent)
+                    ChatMessage(role = "user", content = fullContent)
                 ),
                 temperature = 0.2,
                 useJsonMode = true
             )
 
             val response = api.chatCompletions(request)
-
-            _progress.value = AiReviewStage.InProgress("Receiving critique feedback...", 4, 6)
-            delay(500)
-
             val responseText = response.choices.firstOrNull()?.message?.content
                 ?: throw IllegalStateException("Received an empty response from Fireworks.ai")
 
-            _progress.value = AiReviewStage.InProgress("Validating JSON output...", 5, 6)
-            delay(500)
+            // Stage 4: Formatting recommendations & verdict...
+            _progress.value = AiReviewStage.InProgress("Formatting recommendations & verdict...", 4, 5)
+            delay(400)
 
-            _progress.value = AiReviewStage.InProgress("Parsing suggestions & scores...", 6, 6)
-            
-            // Extract JSON object safely from response string
             val jsonStart = responseText.indexOf('{')
             val jsonEnd = responseText.lastIndexOf('}')
             val cleanJson = if (jsonStart != -1 && jsonEnd != -1 && jsonEnd > jsonStart) {
@@ -99,14 +110,40 @@ class FireworksAiReviewRepository @Inject constructor(
             } else {
                 responseText.trim().removeSurrounding("```json", "```").removeSurrounding("```", "```").trim()
             }
-            val report = json.decodeFromString<AiReviewReport>(cleanJson)
 
+            var report = json.decodeFromString<AiReviewReport>(cleanJson)
+
+            // Calculate weighted score & apply capping rule if not desk rejected
+            if (!report.deskRejected) {
+                val weightedScore = kotlin.math.round(
+                    0.30 * report.structure +
+                    0.25 * report.citations +
+                    0.20 * report.clarity +
+                    0.25 * report.originality
+                ).toInt()
+
+                val finalVerdict = if (report.structure < 60 || report.originality < 60) {
+                    if (weightedScore >= 50) "MAJOR_REVISIONS" else "REJECT"
+                } else if (report.verdict.isNotBlank()) {
+                    report.verdict
+                } else {
+                    when {
+                        weightedScore >= 85 -> "ACCEPT"
+                        weightedScore >= 70 -> "MINOR_REVISIONS"
+                        weightedScore >= 50 -> "MAJOR_REVISIONS"
+                        else -> "REJECT"
+                    }
+                }
+
+                report = report.copy(score = weightedScore, verdict = finalVerdict)
+            }
+
+            // Stage 5: Complete (delivering report)
             _progress.value = AiReviewStage.Complete(report)
             return report
         } catch (e: Exception) {
             val errorMessage = e.localizedMessage ?: "An unexpected error occurred during AI review"
             _progress.value = AiReviewStage.Error(errorMessage)
-            // Return fallback offline report so the app never crashes
             return FakeDataSource.sampleAiReport
         }
     }

@@ -21,12 +21,14 @@ import kotlinx.coroutines.flow.combine
 
 interface PostRepository {
     fun getFeedPosts(): Flow<List<Post>>
+    fun getSavedPosts(): Flow<List<Post>>
     fun getPostById(id: String): Flow<Post?>
     fun getPostsForCircle(circleId: String): Flow<List<Post>>
     suspend fun endorsePost(postId: String): Boolean
     suspend fun savePost(postId: String): Boolean
     suspend fun createPost(post: Post): Boolean
 }
+
 
 interface PaperRepository {
     fun getAllPapers(): Flow<List<Paper>>
@@ -43,7 +45,13 @@ interface PaperRepository {
     suspend fun removePaperFromShelf(paperId: String, shelfId: String): Boolean
     suspend fun toggleSavePaper(paperId: String): Boolean
     fun isPaperSaved(paperId: String): Flow<Boolean>
+    fun getAnnotations(paperId: String): Flow<List<PaperAnnotation>>
+    suspend fun saveAnnotation(annotation: PaperAnnotation): PaperAnnotation
+    suspend fun deleteAnnotation(paperId: String, annotationId: String): Boolean
+    suspend fun getAiPaperBreakdown(paperId: String): AiPaperBreakdown
+    fun getCitationGraph(paperId: String, depth: Int = 2, minCitations: Int = 0): Flow<CitationGraphResponse>
 }
+
 
 interface CircleRepository {
     fun getAllCircles(): Flow<List<Circle>>
@@ -51,6 +59,24 @@ interface CircleRepository {
     fun getCircleById(id: String): Flow<Circle?>
     suspend fun joinCircle(circleId: String): Boolean
     suspend fun leaveCircle(circleId: String): Boolean
+
+    // Workspace & Collaborative Research
+    fun getCircleWorkspace(circleId: String): Flow<CircleWorkspace?>
+    suspend fun updatePinboard(circleId: String, text: String): Boolean
+    fun getCircleMembers(circleId: String): Flow<List<CircleMember>>
+    suspend fun updateMemberRole(circleId: String, userId: String, role: CircleRole): Boolean
+    suspend fun generateInviteCode(circleId: String): String
+    fun getCircleDrafts(circleId: String): Flow<List<CircleDraft>>
+    fun getDraftDetails(draftId: String): Flow<CircleDraft?>
+    suspend fun createCircleDraft(circleId: String, title: String, abstract: String, fileFormat: DraftFormat): CircleDraft
+    fun getDraftReviewRequests(draftId: String): Flow<List<DraftReviewRequest>>
+    suspend fun requestDraftReview(draftId: String, reviewerId: String, sectionTarget: String, notes: String): DraftReviewRequest
+    fun getDraftComments(draftId: String): Flow<List<DraftComment>>
+    suspend fun addDraftComment(draftId: String, sectionIndex: Int, paragraphOffset: Int, content: String): DraftComment
+    suspend fun resolveDraftComment(commentId: String): Boolean
+    fun getCircleReadingLists(circleId: String): Flow<List<CircleReadingList>>
+    suspend fun createCircleReadingList(circleId: String, title: String, description: String, paperIds: List<String>): CircleReadingList
+    suspend fun saveReadingListToMyLibrary(readingListId: String): Boolean
 }
 
 interface UserRepository {
@@ -64,7 +90,9 @@ interface UserRepository {
     suspend fun acceptConnection(userId: String): Boolean
     suspend fun declineConnection(userId: String): Boolean
     suspend fun updateCurrentUser(user: User): Boolean
+    fun getCoauthorGraph(userId: String): Flow<CoauthorGraphResponse>
 }
+
 
 interface CommentRepository {
     fun getCommentsForPost(postId: String): Flow<List<Comment>>
@@ -123,6 +151,7 @@ interface AuthRepository {
     suspend fun addAccount(email: String, password: String): Result<Boolean>
     suspend fun removeAccount(userId: String): Boolean
     suspend fun clearCache(): Boolean
+    suspend fun exportUserData(): Result<String>
     suspend fun logoutAll()
 }
 
@@ -145,6 +174,10 @@ class FakePostRepository @Inject constructor() : PostRepository {
     private val _posts = MutableStateFlow(FakeDataSource.posts.toMutableList())
 
     override fun getFeedPosts(): Flow<List<Post>> = _posts.asStateFlow()
+
+    override fun getSavedPosts(): Flow<List<Post>> = flow {
+        emit(_posts.value.filter { it.isSaved })
+    }
 
     override fun getPostById(id: String): Flow<Post?> = flow {
         emit(_posts.value.find { it.id == id })
@@ -359,10 +392,116 @@ class FakePaperRepository @Inject constructor(
         return true
     }
 
+    private val _annotationsMap = MutableStateFlow<Map<String, List<PaperAnnotation>>>(emptyMap())
+
     override fun isPaperSaved(paperId: String): Flow<Boolean> = flow {
         _savedPaperIds.collect { emit(it.contains(paperId)) }
     }
+
+    override fun getAnnotations(paperId: String): Flow<List<PaperAnnotation>> = flow {
+        _annotationsMap.collect { map ->
+            emit(map[paperId] ?: emptyList())
+        }
+    }
+
+    override suspend fun saveAnnotation(annotation: PaperAnnotation): PaperAnnotation {
+        val currentMap = _annotationsMap.value.toMutableMap()
+        val list = (currentMap[annotation.paperId] ?: emptyList()).toMutableList()
+        val existingIdx = list.indexOfFirst { it.id == annotation.id }
+        if (existingIdx >= 0) {
+            list[existingIdx] = annotation
+        } else {
+            list.add(annotation)
+        }
+        currentMap[annotation.paperId] = list
+        _annotationsMap.value = currentMap
+        return annotation
+    }
+
+    override suspend fun deleteAnnotation(paperId: String, annotationId: String): Boolean {
+        val currentMap = _annotationsMap.value.toMutableMap()
+        val list = (currentMap[paperId] ?: emptyList()).filter { it.id != annotationId }
+        currentMap[paperId] = list
+        _annotationsMap.value = currentMap
+        return true
+    }
+
+    override suspend fun getAiPaperBreakdown(paperId: String): AiPaperBreakdown {
+        val paper = _papers.value.find { it.id == paperId }
+        val title = paper?.title ?: "Selected Research Paper"
+        val abstract = paper?.abstract ?: ""
+
+        return AiPaperBreakdown(
+            paperId = paperId,
+            abstractTldr = "Executive Summary: $title introduces an empirical evaluation model and scalable architectural pattern.",
+            methodologySetup = "Experimental dataset benchmarked against baseline models with 5-fold cross-validation.",
+            coreResults = "Achieves statistical significance with lower latency and improved accuracy metrics.",
+            limitationsFutureWork = "Constrained by memory overhead during peak batch ingestion; planned optimization includes quantized models.",
+            keyTakeaways = listOf(
+                "Provides robust benchmarks across standardized test scenarios.",
+                "Reduces inference complexity while preserving accuracy.",
+                "Establishes a foundational paradigm for future iterations."
+            ),
+            methodologyQualityIndex = 91,
+            qualityLabel = "Very High Methodological Rigor"
+        )
+    }
+
+    override fun getCitationGraph(paperId: String, depth: Int, minCitations: Int): Flow<CitationGraphResponse> = flow {
+        val center = _papers.value.find { it.id == paperId } ?: _papers.value.firstOrNull() ?: Paper(id = paperId, title = "Research Paper")
+        val otherPapers = _papers.value.filter { it.id != center.id }.take(6)
+        
+        val nodes = mutableListOf<CitationGraphNode>()
+        nodes.add(
+            CitationGraphNode(
+                id = center.id,
+                title = center.title,
+                abstract = center.abstract,
+                citationCount = center.citationCount,
+                year = center.year,
+                circleId = center.circleId,
+                field = "Computer Science",
+                authors = center.authors,
+                doi = center.doi,
+                journal = center.journal,
+                isCenter = true,
+                hopDistance = 0,
+                x = 0f,
+                y = 0f
+            )
+        )
+
+        val edges = mutableListOf<CitationGraphEdge>()
+        otherPapers.forEachIndexed { i, p ->
+            val angle = (i * 2 * Math.PI / otherPapers.size) - (Math.PI / 2)
+            val radius = if (i % 2 == 0) 180f else 320f
+            val hop = if (i % 2 == 0) 1 else 2
+            nodes.add(
+                CitationGraphNode(
+                    id = p.id,
+                    title = p.title,
+                    abstract = p.abstract,
+                    citationCount = p.citationCount,
+                    year = p.year,
+                    circleId = p.circleId,
+                    field = if (i % 2 == 0) "Artificial Intelligence" else "HCI",
+                    authors = p.authors,
+                    doi = p.doi,
+                    journal = p.journal,
+                    isCenter = false,
+                    hopDistance = hop,
+                    x = (radius * Math.cos(angle)).toFloat(),
+                    y = (radius * Math.sin(angle)).toFloat()
+                )
+            )
+            edges.add(CitationGraphEdge(source = center.id, target = p.id, type = "CITES"))
+        }
+
+        emit(CitationGraphResponse(nodes = nodes, edges = edges, summary = CitationGraphSummary(nodes.size, nodes.sumOf { it.citationCount }, depth)))
+    }
 }
+
+
 
 class FakeCircleRepository @Inject constructor() : CircleRepository {
     private val _circles = MutableStateFlow(FakeDataSource.circles.toMutableList())
@@ -392,6 +531,173 @@ class FakeCircleRepository @Inject constructor() : CircleRepository {
         if (idx < 0) return false
         current[idx] = current[idx].copy(isJoined = false, memberCount = current[idx].memberCount - 1)
         _circles.value = current
+        return true
+    }
+
+    private val _workspaceState = MutableStateFlow(FakeDataSource.sampleWorkspace)
+    private val _membersState = MutableStateFlow(FakeDataSource.sampleMembers)
+    private val _draftsState = MutableStateFlow(FakeDataSource.sampleDrafts)
+    private val _reviewRequestsState = MutableStateFlow(FakeDataSource.sampleReviewRequests)
+    private val _commentsState = MutableStateFlow(FakeDataSource.sampleDraftComments)
+    private val _readingListsState = MutableStateFlow(FakeDataSource.sampleReadingLists)
+
+    override fun getCircleWorkspace(circleId: String): Flow<CircleWorkspace?> = flow {
+        emit(_workspaceState.value.copy(circleId = circleId))
+    }
+
+    override suspend fun updatePinboard(circleId: String, text: String): Boolean {
+        _workspaceState.value = _workspaceState.value.copy(pinBoardText = text, updatedAt = System.currentTimeMillis())
+        return true
+    }
+
+    override fun getCircleMembers(circleId: String): Flow<List<CircleMember>> = _membersState.asStateFlow()
+
+    override suspend fun updateMemberRole(circleId: String, userId: String, role: CircleRole): Boolean {
+        val current = _membersState.value.toMutableList()
+        val idx = current.indexOfFirst { it.userId == userId }
+        if (idx >= 0) {
+            current[idx] = current[idx].copy(role = role)
+            _membersState.value = current
+        }
+        return true
+    }
+
+    override suspend fun generateInviteCode(circleId: String): String {
+        val code = "INV-${circleId.take(4).uppercase()}-${System.currentTimeMillis() % 10000}"
+        _workspaceState.value = _workspaceState.value.copy(inviteCode = code)
+        return code
+    }
+
+    override fun getCircleDrafts(circleId: String): Flow<List<CircleDraft>> = flow {
+        emit(_draftsState.value.filter { it.circleId == circleId || circleId == "cir_hci" })
+    }
+
+    override fun getDraftDetails(draftId: String): Flow<CircleDraft?> = flow {
+        emit(_draftsState.value.find { it.id == draftId })
+    }
+
+    override suspend fun createCircleDraft(
+        circleId: String,
+        title: String,
+        abstract: String,
+        fileFormat: DraftFormat
+    ): CircleDraft {
+        val newDraft = CircleDraft(
+            id = "drf_${System.currentTimeMillis()}",
+            circleId = circleId,
+            title = title,
+            abstract = abstract,
+            leadAuthorId = FakeDataSource.currentUser.id,
+            leadAuthorName = FakeDataSource.currentUser.name.ifBlank { "Maya Okafor" },
+            leadAuthorAvatar = FakeDataSource.currentUser.avatarUrl,
+            fileFormat = fileFormat,
+            status = DraftStatus.DRAFT,
+            version = "v1.0",
+            sections = listOf(
+                "Abstract",
+                "1. Introduction & Background",
+                "2. System Architecture & Methodology",
+                "3. Experimental Evaluation",
+                "4. Discussion & Conclusion"
+            )
+        )
+        val current = _draftsState.value.toMutableList()
+        current.add(0, newDraft)
+        _draftsState.value = current
+        return newDraft
+    }
+
+    override fun getDraftReviewRequests(draftId: String): Flow<List<DraftReviewRequest>> = flow {
+        emit(_reviewRequestsState.value.filter { it.draftId == draftId })
+    }
+
+    override suspend fun requestDraftReview(
+        draftId: String,
+        reviewerId: String,
+        sectionTarget: String,
+        notes: String
+    ): DraftReviewRequest {
+        val req = DraftReviewRequest(
+            id = "rr_${System.currentTimeMillis()}",
+            draftId = draftId,
+            reviewerId = reviewerId,
+            reviewerName = "Prof. James Whitmore",
+            reviewerAvatar = "https://api.dicebear.com/8.x/avataaars/svg?seed=james-whitmore",
+            requesterId = FakeDataSource.currentUser.id,
+            sectionTarget = sectionTarget,
+            notes = notes,
+            status = ReviewRequestStatus.PENDING
+        )
+        val current = _reviewRequestsState.value.toMutableList()
+        current.add(0, req)
+        _reviewRequestsState.value = current
+        return req
+    }
+
+    override fun getDraftComments(draftId: String): Flow<List<DraftComment>> = flow {
+        emit(_commentsState.value.filter { it.draftId == draftId })
+    }
+
+    override suspend fun addDraftComment(
+        draftId: String,
+        sectionIndex: Int,
+        paragraphOffset: Int,
+        content: String
+    ): DraftComment {
+        val comment = DraftComment(
+            id = "dc_${System.currentTimeMillis()}",
+            draftId = draftId,
+            authorId = FakeDataSource.currentUser.id,
+            authorName = FakeDataSource.currentUser.name.ifBlank { "Maya Okafor" },
+            authorAvatarUrl = FakeDataSource.currentUser.avatarUrl,
+            sectionIndex = sectionIndex,
+            paragraphOffset = paragraphOffset,
+            content = content,
+            isResolved = false
+        )
+        val current = _commentsState.value.toMutableList()
+        current.add(comment)
+        _commentsState.value = current
+        return comment
+    }
+
+    override suspend fun resolveDraftComment(commentId: String): Boolean {
+        val current = _commentsState.value.toMutableList()
+        val idx = current.indexOfFirst { it.id == commentId }
+        if (idx >= 0) {
+            current[idx] = current[idx].copy(isResolved = true)
+            _commentsState.value = current
+        }
+        return true
+    }
+
+    override fun getCircleReadingLists(circleId: String): Flow<List<CircleReadingList>> = flow {
+        emit(_readingListsState.value.filter { it.circleId == circleId || circleId == "cir_hci" })
+    }
+
+    override suspend fun createCircleReadingList(
+        circleId: String,
+        title: String,
+        description: String,
+        paperIds: List<String>
+    ): CircleReadingList {
+        val list = CircleReadingList(
+            id = "rl_${System.currentTimeMillis()}",
+            circleId = circleId,
+            title = title,
+            description = description,
+            createdById = FakeDataSource.currentUser.id,
+            createdByName = FakeDataSource.currentUser.name.ifBlank { "Maya Okafor" },
+            paperCount = paperIds.size,
+            papers = emptyList()
+        )
+        val current = _readingListsState.value.toMutableList()
+        current.add(0, list)
+        _readingListsState.value = current
+        return list
+    }
+
+    override suspend fun saveReadingListToMyLibrary(readingListId: String): Boolean {
         return true
     }
 }
@@ -455,7 +761,74 @@ class FakeUserRepository @Inject constructor() : UserRepository {
         _currentUser.value = user
         return true
     }
+
+    override fun getCoauthorGraph(userId: String): Flow<CoauthorGraphResponse> = flow {
+        val center = _users.value.find { it.id == userId } ?: _users.value.firstOrNull() ?: User(id = userId, name = "Researcher")
+        val collaborators = _users.value.filter { it.id != center.id }.take(5)
+
+        val nodes = mutableListOf<CoauthorGraphNode>()
+        nodes.add(
+            CoauthorGraphNode(
+                id = center.id,
+                name = center.name,
+                avatarUrl = center.avatarUrl,
+                institution = center.institution,
+                fieldOfStudy = center.fieldOfStudy,
+                citationCount = center.citationCount,
+                hIndex = 14,
+                i10Index = 22,
+                clusterId = "cluster_main",
+                isCenter = true,
+                x = 0f,
+                y = 0f
+            )
+        )
+
+        val edges = mutableListOf<CoauthorGraphEdge>()
+        collaborators.forEachIndexed { i, u ->
+            val angle = (i * 2 * Math.PI / collaborators.size) - (Math.PI / 2)
+            val radius = 220f
+            nodes.add(
+                CoauthorGraphNode(
+                    id = u.id,
+                    name = u.name,
+                    avatarUrl = u.avatarUrl,
+                    institution = u.institution,
+                    fieldOfStudy = u.fieldOfStudy,
+                    citationCount = u.citationCount,
+                    hIndex = 8 + i,
+                    i10Index = 12 + i,
+                    clusterId = if (i % 2 == 0) "cluster_mit" else "cluster_eth",
+                    isCenter = false,
+                    x = (radius * Math.cos(angle)).toFloat(),
+                    y = (radius * Math.sin(angle)).toFloat()
+                )
+            )
+            edges.add(CoauthorGraphEdge(source = center.id, target = u.id, weight = 2 + i, publications = listOf("Joint Publication Paper")))
+        }
+
+        val clusters = listOf(
+            CoauthorCluster(id = "cluster_main", name = center.institution.ifBlank { "Primary Lab" }, color = "#6C63FF", memberIds = listOf(center.id)),
+            CoauthorCluster(id = "cluster_mit", name = "Collaborating Institute", color = "#00B4D8", memberIds = collaborators.map { it.id })
+        )
+
+        val analytics = ResearcherAnalytics(
+            totalCitations = center.citationCount,
+            hIndex = 14,
+            i10Index = 22,
+            citationVelocity = listOf(
+                CitationVelocityPoint(2020, 25),
+                CitationVelocityPoint(2021, 60),
+                CitationVelocityPoint(2022, 110),
+                CitationVelocityPoint(2023, 190),
+                CitationVelocityPoint(2024, 320)
+            )
+        )
+
+        emit(CoauthorGraphResponse(nodes = nodes, edges = edges, clusters = clusters, analytics = analytics))
+    }
 }
+
 
 class FakeCommentRepository @Inject constructor() : CommentRepository {
     private val _commentsByPost = mutableMapOf<String, MutableStateFlow<List<Comment>>>()
@@ -794,13 +1167,28 @@ class FakeAuthRepository @Inject constructor(
     }
 
     override suspend fun logout() {
-        _loggedIn = false
+        val currentAccounts = _savedAccounts.value
+        val activeAccount = currentAccounts.find { it.isActive }
+        val remaining = currentAccounts.filter { it.userId != activeAccount?.userId }
+        if (remaining.isNotEmpty()) {
+            val nextActive = remaining.first().copy(isActive = true)
+            _savedAccounts.value = remaining.map { if (it.userId == nextActive.userId) nextActive else it.copy(isActive = false) }
+            val matchingUser = FakeDataSource.users.find { it.id == nextActive.userId }
+                ?: User(id = nextActive.userId, name = nextActive.name, avatarUrl = nextActive.avatarUrl)
+            userRepository.updateCurrentUser(matchingUser)
+        } else {
+            _savedAccounts.value = emptyList()
+            _loggedIn = false
+        }
     }
 
     override suspend fun changePassword(oldPassword: String, newPassword: String): Result<Unit> {
         delay(600)
-        if (oldPassword.isBlank() || newPassword.length < 6) {
-            return Result.failure(Exception("New password must be at least 6 characters long."))
+        if (oldPassword.isBlank()) {
+            return Result.failure(Exception("Current password is required."))
+        }
+        if (newPassword.length < 6 || (!newPassword.any { it.isUpperCase() } && !newPassword.any { it.isDigit() })) {
+            return Result.failure(Exception("Password must be >= 6 chars with at least one uppercase letter or number."))
         }
         return Result.success(Unit)
     }
@@ -860,6 +1248,19 @@ class FakeAuthRepository @Inject constructor(
     override suspend fun clearCache(): Boolean {
         delay(500)
         return true
+    }
+
+    override suspend fun exportUserData(): Result<String> {
+        delay(400)
+        val jsonSummary = """
+            {
+              "exportTimestamp": ${System.currentTimeMillis()},
+              "appName": "CiteCircle",
+              "userAccounts": ${_savedAccounts.value.size},
+              "activeUser": "${_savedAccounts.value.find { it.isActive }?.email ?: "Unknown"}"
+            }
+        """.trimIndent()
+        return Result.success(jsonSummary)
     }
 
     override suspend fun logoutAll() {

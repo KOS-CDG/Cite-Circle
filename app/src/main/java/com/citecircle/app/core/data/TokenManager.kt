@@ -32,6 +32,12 @@ class TokenManager @Inject constructor(
         private val KEY_PENDING_CONNECTIONS_JSON = stringPreferencesKey("pending_connections_json")
         private val KEY_SAVED_ACCOUNTS_JSON = stringPreferencesKey("saved_accounts_json")
         private val KEY_USER_EMAIL = stringPreferencesKey("user_email")
+        private val KEY_NOTIF_ENDORSEMENTS = stringPreferencesKey("notif_endorsements")
+        private val KEY_NOTIF_COMMENTS = stringPreferencesKey("notif_comments")
+        private val KEY_NOTIF_CONNECTIONS = stringPreferencesKey("notif_connections")
+        private val KEY_NOTIF_CITATIONS = stringPreferencesKey("notif_citations")
+        private val KEY_NOTIF_AI = stringPreferencesKey("notif_ai")
+        private val KEY_EMAIL_DIGEST = stringPreferencesKey("email_digest")
     }
 
     /** Persist tokens after login/signup. */
@@ -45,6 +51,15 @@ class TokenManager @Inject constructor(
 
     /** Clear tokens on logout. */
     suspend fun clearTokens() {
+        context.tokenDataStore.edit { prefs ->
+            prefs.remove(KEY_ACCESS_TOKEN)
+            prefs.remove(KEY_REFRESH_TOKEN)
+            prefs.remove(KEY_USER_ID)
+        }
+    }
+
+    /** Clear all preferences on logout all. */
+    suspend fun clearAll() {
         context.tokenDataStore.edit { it.clear() }
     }
 
@@ -120,4 +135,26 @@ class TokenManager @Inject constructor(
 
     suspend fun getUserEmail(): String? =
         context.tokenDataStore.data.map { it[KEY_USER_EMAIL] }.first()
+
+    // ── Notification & Digest Preference Helpers ──
+
+    suspend fun saveNotificationPref(key: String, enabled: Boolean) {
+        context.tokenDataStore.edit { prefs ->
+            val prefKey = when(key) {
+                "endorsements" -> KEY_NOTIF_ENDORSEMENTS
+                "comments" -> KEY_NOTIF_COMMENTS
+                "connections" -> KEY_NOTIF_CONNECTIONS
+                "citations" -> KEY_NOTIF_CITATIONS
+                "ai" -> KEY_NOTIF_AI
+                else -> null
+            }
+            if (prefKey != null) {
+                prefs[prefKey] = enabled.toString()
+            }
+        }
+    }
+
+    suspend fun saveEmailDigest(frequency: String) {
+        context.tokenDataStore.edit { it[KEY_EMAIL_DIGEST] = frequency }
+    }
 }

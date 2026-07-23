@@ -83,6 +83,7 @@ class FeedViewModel @Inject constructor(
     val isRefreshing = _isRefreshing.asStateFlow()
 
     private val _postsFlow = postRepository.getFeedPosts()
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
     private val _endorseOverrides = MutableStateFlow<Map<String, Pair<Boolean, Int>>>(emptyMap())
     private val _saveOverrides = MutableStateFlow<Map<String, Boolean>>(emptyMap())
 
@@ -165,7 +166,7 @@ class FeedViewModel @Inject constructor(
 
     fun endorsePost(postId: String) {
         viewModelScope.launch {
-            val currentPosts = _postsFlow.firstOrNull() ?: emptyList()
+            val currentPosts = _postsFlow.value
             val currentPost = currentPosts.find { it.id == postId }
             val (currentEndorsed, currentCount) = _endorseOverrides.value[postId]
                 ?: Pair(currentPost?.isEndorsed ?: false, currentPost?.endorseCount ?: 0)
@@ -178,7 +179,7 @@ class FeedViewModel @Inject constructor(
 
     fun savePost(postId: String) {
         viewModelScope.launch {
-            val currentPosts = _postsFlow.firstOrNull() ?: emptyList()
+            val currentPosts = _postsFlow.value
             val currentPost = currentPosts.find { it.id == postId }
             val currentSaved = _saveOverrides.value[postId] ?: (currentPost?.isSaved ?: false)
             val newSaved = !currentSaved
@@ -186,6 +187,7 @@ class FeedViewModel @Inject constructor(
             postRepository.savePost(postId)
         }
     }
+
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

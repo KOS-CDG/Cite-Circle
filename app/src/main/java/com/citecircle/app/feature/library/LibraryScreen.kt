@@ -26,9 +26,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.citecircle.app.core.data.PaperRepository
+import com.citecircle.app.core.data.PostRepository
 import com.citecircle.app.core.designsystem.*
 import com.citecircle.app.core.model.Paper
+import com.citecircle.app.core.model.Post
 import com.citecircle.app.core.model.Shelf
+import com.citecircle.app.feature.feed.PostCard
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -48,10 +51,14 @@ import kotlinx.coroutines.flow.asStateFlow
 
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
-    private val paperRepository: PaperRepository
+    private val paperRepository: PaperRepository,
+    private val postRepository: PostRepository
 ) : ViewModel() {
 
     val savedPapers: StateFlow<List<Paper>> = paperRepository.getSavedPapers()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val savedPosts: StateFlow<List<Post>> = postRepository.getSavedPosts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val shelves: StateFlow<List<Shelf>> = paperRepository.getShelves()
@@ -85,6 +92,12 @@ class LibraryViewModel @Inject constructor(
             paperRepository.toggleSavePaper(paperId)
         }
     }
+
+    fun savePost(postId: String) {
+        viewModelScope.launch {
+            postRepository.savePost(postId)
+        }
+    }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -96,9 +109,13 @@ class LibraryViewModel @Inject constructor(
 fun LibraryScreen(
     onBack: () -> Unit,
     onPaperClick: (String) -> Unit,
+    onPostClick: (String) -> Unit = {},
+    onUserClick: (String) -> Unit = {},
+    onCircleClick: (String) -> Unit = {},
     viewModel: LibraryViewModel = hiltViewModel()
 ) {
     val savedPapers by viewModel.savedPapers.collectAsState()
+    val savedPosts by viewModel.savedPosts.collectAsState()
     val shelves by viewModel.shelves.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
 
@@ -108,6 +125,7 @@ fun LibraryScreen(
     var showCreateShelfDialog by remember { mutableStateOf(false) }
 
     val activeShelf = shelves.find { it.id == activeShelfId }
+
 
     Scaffold(
         topBar = {
@@ -189,7 +207,7 @@ fun LibraryScreen(
 
                     // Tab selector
                     CcTabRow(
-                        tabs = listOf("Saved Papers (${savedPapers.size})", "Shelves (${shelves.size})"),
+                        tabs = listOf("Saved Papers (${savedPapers.size})", "Saved Posts (${savedPosts.size})", "Shelves (${shelves.size})"),
                         selectedIndex = selectedTab,
                         onTabSelected = { selectedTab = it },
                         modifier = Modifier.fillMaxWidth()
@@ -212,13 +230,22 @@ fun LibraryScreen(
                             onPaperClick = onPaperClick,
                             onUnsave = { viewModel.toggleSavePaper(it) }
                         )
-                        1 -> ShelvesContent(
+                        1 -> SavedPostsContent(
+                            posts = savedPosts,
+                            searchQuery = searchQuery,
+                            onPostClick = onPostClick,
+                            onUserClick = onUserClick,
+                            onCircleClick = onCircleClick,
+                            onSave = { viewModel.savePost(it) }
+                        )
+                        2 -> ShelvesContent(
                             shelves = shelves,
                             searchQuery = searchQuery,
                             onShelfClick = { activeShelfId = it }
                         )
                     }
                 }
+
             }
 
             // Create Shelf Dialog
@@ -278,8 +305,55 @@ fun SavedPapersContent(
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// SavedPostsContent
+// ──────────────────────────────────────────────────────────────────────────────
+
+@Composable
+fun SavedPostsContent(
+    posts: List<Post>,
+    searchQuery: String,
+    onPostClick: (String) -> Unit,
+    onUserClick: (String) -> Unit,
+    onCircleClick: (String) -> Unit,
+    onSave: (String) -> Unit
+) {
+    val filteredPosts = remember(posts, searchQuery) {
+        posts.filter { post ->
+            post.content.contains(searchQuery, ignoreCase = true) ||
+                    post.author.name.contains(searchQuery, ignoreCase = true)
+        }.distinctBy { it.id }
+    }
+
+    if (filteredPosts.isEmpty()) {
+        CcEmptyState(
+            emoji = "🔖",
+            title = if (searchQuery.isNotEmpty()) "No match found" else "No saved posts",
+            subtitle = if (searchQuery.isNotEmpty()) "Try refining your search keyword." else "Save posts by tapping bookmark on post cards."
+        )
+    } else {
+        LazyColumn(
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            items(filteredPosts, key = { it.id }) { post ->
+                PostCard(
+                    post = post.copy(isSaved = true),
+                    onPostClick = onPostClick,
+                    onUserClick = onUserClick,
+                    onCircleClick = onCircleClick,
+                    onEndorse = {},
+                    onSave = onSave
+                )
+            }
+        }
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // ShelvesContent
 // ──────────────────────────────────────────────────────────────────────────────
+
 
 @Composable
 fun ShelvesContent(

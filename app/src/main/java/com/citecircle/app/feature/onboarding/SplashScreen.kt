@@ -171,19 +171,19 @@ fun SplashScreen(
                     drawCircle(color = CcColors.SeafoamTeal, radius = 4.dp.toPx(), center = node3)
                 }
 
-                // Center Quotation mark icon badge
+                // Center Quotation mark icon badge with newly generated Cite Circle logo
                 Surface(
                     shape = CircleShape,
                     color = CcColors.InkNavy,
-                    modifier = Modifier.size(72.dp)
+                    modifier = Modifier.size(76.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = "“",
-                            fontSize = 54.sp,
-                            fontFamily = FrauncesFamily,
-                            color = CcColors.PaperCream,
-                            modifier = Modifier.offset(y = (-3).dp)
+                        androidx.compose.foundation.Image(
+                            painter = androidx.compose.ui.res.painterResource(id = com.citecircle.app.R.drawable.ic_citecircle_logo),
+                            contentDescription = "Cite Circle Logo",
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(CircleShape)
                         )
                     }
                 }

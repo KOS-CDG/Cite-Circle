@@ -138,6 +138,15 @@ export default function OtherProfileScreen() {
           <StatItem count={user.citation_count} label="Citations" />
         </View>
 
+        <Pressable
+          onPress={() => router.push({ pathname: '/citation-graph', params: { user_id: user.id, initialMode: 'coauthors' } })}
+          className="mt-4 w-full flex-row items-center justify-center gap-2 rounded-xl border border-academic-gold/30 bg-academic-gold/10 py-3 dark:border-academic-gold/20 dark:bg-[#252530]"
+        >
+          <UserCheck size={16} color={colors.accent} />
+          <Text className="text-sm font-bold text-academic-ink dark:text-[#EFEAE0]">Co-Author Network & Impact</Text>
+        </Pressable>
+
+
         {user.bio ? (
           <Text className="mt-5 text-sm text-academic-ink dark:text-[#EFEAE0]">{user.bio}</Text>
         ) : null}

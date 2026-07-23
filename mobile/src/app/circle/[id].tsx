@@ -10,7 +10,7 @@ import { useAppTheme } from '@/components/ui/theme-provider';
 import { router } from 'expo-router';
 import { ApiError, apiClient } from '@/lib/api-client';
 import { argbToCss } from '@/lib/format';
-import type { Circle, CircleMembershipResult, EndorsePostResult, Post } from '@/types';
+import type { Circle, CircleMembershipResult, EndorsePostResult, Post, SavePostResult } from '@/types';
 
 export default function CircleDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -82,6 +82,22 @@ export default function CircleDetailScreen() {
     }
   }
 
+  async function onSave(postId: string) {
+    setPosts((current) =>
+      current.map((post) => (post.id === postId ? { ...post, is_saved: !post.is_saved } : post)),
+    );
+    try {
+      const result = await apiClient.post<SavePostResult>(`/posts/${postId}/save`);
+      setPosts((current) =>
+        current.map((post) => (post.id === postId ? { ...post, is_saved: result.saved } : post)),
+      );
+    } catch {
+      setPosts((current) =>
+        current.map((post) => (post.id === postId ? { ...post, is_saved: !post.is_saved } : post)),
+      );
+    }
+  }
+
   if (isLoading) {
     return (
       <View className="flex-1 items-center justify-center bg-academic-paper dark:bg-[#15151A]">
@@ -108,8 +124,14 @@ export default function CircleDetailScreen() {
         keyExtractor={(post) => post.id}
         contentContainerClassName="gap-3 px-4 pb-6"
         renderItem={({ item }) => (
-          <PostCard post={item} onPress={(postId) => router.push(`/post/${postId}`)} onEndorse={onEndorse} />
+          <PostCard
+            post={item}
+            onPress={(postId) => router.push(`/post/${postId}`)}
+            onEndorse={onEndorse}
+            onSave={onSave}
+          />
         )}
+
         ListHeaderComponent={
           <View className="mb-4">
             <View

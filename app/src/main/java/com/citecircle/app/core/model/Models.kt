@@ -87,6 +87,45 @@ data class Paper(
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Paper Annotation & AI Section Breakdown
+// ──────────────────────────────────────────────────────────────────────────────
+
+@Serializable
+enum class AnnotationColor(val hex: Long, val label: String) {
+    YELLOW(0xFFFFF59D, "Key Finding"),
+    GREEN(0xFFA5D6A7, "Methodology"),
+    BLUE(0xFF90CAF9, "Citation"),
+    PURPLE(0xFFCE93D8, "Question / Critique")
+}
+
+@Serializable
+data class PaperAnnotation(
+    val id: String,
+    val paperId: String,
+    val userId: String = "",
+    val pageNumber: Int,
+    val selectedText: String = "",
+    val color: AnnotationColor = AnnotationColor.YELLOW,
+    val noteText: String = "",
+    val xRatio: Float = 0f,
+    val yRatio: Float = 0f,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Serializable
+data class AiPaperBreakdown(
+    val paperId: String,
+    val abstractTldr: String = "",
+    val methodologySetup: String = "",
+    val coreResults: String = "",
+    val limitationsFutureWork: String = "",
+    val keyTakeaways: List<String> = emptyList(),
+    val methodologyQualityIndex: Int = 85,
+    val qualityLabel: String = "High Methodological Rigor"
+)
+
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Circle (Community)
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -176,6 +215,7 @@ data class AiSuggestion(
     val section: String,
     val text: String,
     val severity: Severity,
+    val passageQuote: String? = null,
     val isAddressed: Boolean = false
 )
 
@@ -186,7 +226,12 @@ data class AiReviewReport(
     val citations: Int,        // 0–100
     val clarity: Int,          // 0–100
     val originality: Int,      // 0–100
-    val suggestions: List<AiSuggestion>
+    val verdict: String = "",
+    val summary: String = "",
+    val strengths: List<String> = emptyList(),
+    val weaknesses: List<String> = emptyList(),
+    val suggestions: List<AiSuggestion> = emptyList(),
+    val deskRejected: Boolean = false
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -197,6 +242,8 @@ data class PaperDraft(
     val title: String = "",
     val coAuthors: List<User> = emptyList(),
     val abstract: String = "",
+    val fullText: String = "",
+    val sections: Map<String, String> = emptyMap(),
     val fieldTags: List<String> = emptyList(),
     val pdfFileName: String? = null,
     val pdfFileSizeKb: Long? = null,
@@ -319,5 +366,137 @@ data class SavedAccount(
     val refreshToken: String = "",
     val isActive: Boolean = false
 )
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Collaborative Research Workspace (Circle Workspace, Drafts, Reading Lists)
+// ──────────────────────────────────────────────────────────────────────────────
+
+enum class CircleRole {
+    ADMIN, LEAD_RESEARCHER, CONTRIBUTOR, GUEST_OBSERVER;
+
+    fun displayName(): String = when (this) {
+        ADMIN -> "Circle Admin"
+        LEAD_RESEARCHER -> "Lead Researcher"
+        CONTRIBUTOR -> "Contributor"
+        GUEST_OBSERVER -> "Guest Observer"
+    }
+}
+
+enum class CircleAccessType {
+    PUBLIC, PRIVATE_INVITE, REQUEST_APPROVAL
+}
+
+enum class DraftStatus {
+    DRAFT, UNDER_REVIEW, REVISION, READY_TO_SUBMIT;
+
+    fun displayName(): String = when (this) {
+        DRAFT -> "Draft"
+        UNDER_REVIEW -> "Under Review"
+        REVISION -> "Revision Needed"
+        READY_TO_SUBMIT -> "Ready to Submit"
+    }
+}
+
+enum class DraftFormat {
+    PDF, DOCX, MARKDOWN
+}
+
+enum class ReviewRequestStatus {
+    PENDING, APPROVED, CHANGES_REQUESTED
+}
+
+@Serializable
+data class CircleMember(
+    val userId: String,
+    val circleId: String,
+    val role: CircleRole = CircleRole.CONTRIBUTOR,
+    val joinedAt: Long = 0,
+    val name: String = "",
+    val avatarUrl: String = "",
+    val institution: String = ""
+)
+
+@Serializable
+data class CircleWorkspace(
+    val id: String,
+    val circleId: String,
+    val pinBoardText: String = "",
+    val accessType: CircleAccessType = CircleAccessType.PUBLIC,
+    val inviteCode: String = "",
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+@Serializable
+data class CircleDraft(
+    val id: String,
+    val circleId: String,
+    val title: String,
+    val abstract: String = "",
+    val leadAuthorId: String,
+    val leadAuthorName: String = "",
+    val leadAuthorAvatar: String = "",
+    val fileFormat: DraftFormat = DraftFormat.PDF,
+    val fileUrl: String = "",
+    val status: DraftStatus = DraftStatus.DRAFT,
+    val version: String = "v1.0",
+    val sections: List<String> = emptyList(),
+    val createdAt: Long = System.currentTimeMillis(),
+    val reviewCount: Int = 0,
+    val commentCount: Int = 0
+)
+
+@Serializable
+data class DraftReviewRequest(
+    val id: String,
+    val draftId: String,
+    val reviewerId: String,
+    val reviewerName: String = "",
+    val reviewerAvatar: String = "",
+    val requesterId: String,
+    val sectionTarget: String = "",
+    val status: ReviewRequestStatus = ReviewRequestStatus.PENDING,
+    val notes: String = "",
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+@Serializable
+data class DraftComment(
+    val id: String,
+    val draftId: String,
+    val authorId: String,
+    val authorName: String = "",
+    val authorAvatarUrl: String = "",
+    val sectionIndex: Int = 0,
+    val paragraphOffset: Int = 0,
+    val content: String,
+    val isResolved: Boolean = false,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+@Serializable
+data class CircleReadingList(
+    val id: String,
+    val circleId: String,
+    val title: String,
+    val description: String = "",
+    val createdById: String,
+    val createdByName: String = "",
+    val createdAt: Long = System.currentTimeMillis(),
+    val paperCount: Int = 0,
+    val papers: List<Paper> = emptyList()
+)
+
+@Serializable
+data class CircleJoinRequest(
+    val id: String,
+    val circleId: String,
+    val userId: String,
+    val userName: String = "",
+    val userAvatarUrl: String = "",
+    val status: String = "PENDING",
+    val message: String = "",
+    val createdAt: Long = System.currentTimeMillis()
+)
+
 
 

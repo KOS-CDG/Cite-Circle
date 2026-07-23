@@ -25,8 +25,11 @@ sealed interface CcRoute
 
 // Detail screens
 @Serializable data class CircleDetailRoute(val circleId: String) : CcRoute
+@Serializable data class DraftDetailRoute(val draftId: String) : CcRoute
 @Serializable data class PaperDetailRoute(val paperId: String) : CcRoute
+@Serializable data class PdfViewerRoute(val paperId: String, val initialPage: Int = 1) : CcRoute
 @Serializable data class CommentThreadRoute(val postId: String) : CcRoute
+
 @Serializable data class OtherProfileRoute(val userId: String) : CcRoute
 @Serializable data class ChatRoute(val conversationId: String) : CcRoute
 

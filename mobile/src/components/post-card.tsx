@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { ArrowBigUp, MessageCircle } from 'lucide-react-native';
+import { Bookmark, BookmarkCheck, MessageCircle, Star } from 'lucide-react-native';
 import { Pressable, Text, View } from 'react-native';
 
 import { ScholarlyText } from '@/components/ui/scholarly-text';
@@ -20,9 +20,10 @@ interface PostCardProps {
   post: Post;
   onPress: (postId: string) => void;
   onEndorse: (postId: string) => void;
+  onSave?: (postId: string) => void;
 }
 
-export function PostCard({ post, onPress, onEndorse }: PostCardProps) {
+export function PostCard({ post, onPress, onEndorse, onSave }: PostCardProps) {
   const { colors } = useAppTheme();
   const author = useUserById(post.author_id);
 
@@ -67,28 +68,44 @@ export function PostCard({ post, onPress, onEndorse }: PostCardProps) {
         <ScholarlyText text={post.content} style={{ fontSize: 14 }} color={colors.text} />
       </View>
 
-      <View className="mt-4 flex-row items-center gap-5">
-        <Pressable
-          onPress={() => onEndorse(post.id)}
-          className="flex-row items-center gap-1.5 rounded-full px-2 py-1"
-          hitSlop={8}
-        >
-          <ArrowBigUp
-            size={18}
-            color={post.is_endorsed ? colors.accent : colors.textSecondary}
-            fill={post.is_endorsed ? colors.accent : 'transparent'}
-          />
-          <Text className="text-sm font-semibold" style={{ color: post.is_endorsed ? colors.accent : colors.textSecondary }}>
-            {post.endorse_count}
-          </Text>
-        </Pressable>
+      <View className="mt-4 flex-row items-center justify-between">
+        <View className="flex-row items-center gap-4">
+          <Pressable
+            onPress={() => onEndorse(post.id)}
+            className="flex-row items-center gap-1.5 rounded-full px-2 py-1"
+            hitSlop={8}
+          >
+            <Star
+              size={18}
+              color={post.is_endorsed ? '#EAB308' : colors.textSecondary}
+              fill={post.is_endorsed ? '#EAB308' : 'transparent'}
+            />
+            <Text className="text-sm font-semibold" style={{ color: post.is_endorsed ? '#EAB308' : colors.textSecondary }}>
+              {post.endorse_count > 0 ? post.endorse_count : 'Star'}
+            </Text>
+          </Pressable>
 
-        <View className="flex-row items-center gap-1.5">
-          <MessageCircle size={17} color={colors.textSecondary} />
-          <Text className="text-sm" style={{ color: colors.textSecondary }}>
-            {post.comment_count}
-          </Text>
+          <View className="flex-row items-center gap-1.5">
+            <MessageCircle size={17} color={colors.textSecondary} />
+            <Text className="text-sm" style={{ color: colors.textSecondary }}>
+              {post.comment_count}
+            </Text>
+          </View>
         </View>
+
+        {onSave ? (
+          <Pressable
+            onPress={() => onSave(post.id)}
+            className="flex-row items-center gap-1 rounded-full px-2 py-1"
+            hitSlop={8}
+          >
+            {post.is_saved ? (
+              <BookmarkCheck size={18} color={colors.accent} fill={colors.accent} />
+            ) : (
+              <Bookmark size={18} color={colors.textSecondary} />
+            )}
+          </Pressable>
+        ) : null}
       </View>
     </Pressable>
   );

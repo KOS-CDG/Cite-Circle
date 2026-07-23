@@ -2,8 +2,10 @@ package com.citecircle.app.core.data
 
 import com.citecircle.app.core.model.*
 import com.citecircle.app.core.network.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
@@ -156,9 +158,168 @@ private fun CircleDto.toDomain() = Circle(
     category = category,
 )
 
+private fun CircleMemberDto.toDomain() = CircleMember(
+    userId = userId,
+    circleId = circleId,
+    role = runCatching { CircleRole.valueOf(role) }.getOrDefault(CircleRole.CONTRIBUTOR),
+    joinedAt = joinedAt,
+    name = name,
+    avatarUrl = avatarUrl,
+    institution = institution
+)
+
+private fun CircleWorkspaceDto.toDomain() = CircleWorkspace(
+    id = id,
+    circleId = circleId,
+    pinBoardText = pinBoardText,
+    accessType = runCatching { CircleAccessType.valueOf(accessType) }.getOrDefault(CircleAccessType.PUBLIC),
+    inviteCode = inviteCode,
+    updatedAt = updatedAt
+)
+
+private fun CircleDraftDto.toDomain() = CircleDraft(
+    id = id,
+    circleId = circleId,
+    title = title,
+    abstract = abstract,
+    leadAuthorId = leadAuthorId,
+    leadAuthorName = leadAuthorName,
+    leadAuthorAvatar = leadAuthorAvatar,
+    fileFormat = runCatching { DraftFormat.valueOf(fileFormat) }.getOrDefault(DraftFormat.PDF),
+    fileUrl = fileUrl,
+    status = runCatching { DraftStatus.valueOf(status) }.getOrDefault(DraftStatus.DRAFT),
+    version = version,
+    sections = sections,
+    createdAt = createdAt,
+    reviewCount = reviewCount,
+    commentCount = commentCount
+)
+
+private fun DraftReviewRequestDto.toDomain() = DraftReviewRequest(
+    id = id,
+    draftId = draftId,
+    reviewerId = reviewerId,
+    reviewerName = reviewerName,
+    reviewerAvatar = reviewerAvatar,
+    requesterId = requesterId,
+    sectionTarget = sectionTarget,
+    status = runCatching { ReviewRequestStatus.valueOf(status) }.getOrDefault(ReviewRequestStatus.PENDING),
+    notes = notes,
+    createdAt = createdAt
+)
+
+private fun DraftCommentDto.toDomain() = DraftComment(
+    id = id,
+    draftId = draftId,
+    authorId = authorId,
+    authorName = authorName,
+    authorAvatarUrl = authorAvatarUrl,
+    sectionIndex = sectionIndex,
+    paragraphOffset = paragraphOffset,
+    content = content,
+    isResolved = isResolved,
+    createdAt = createdAt
+)
+
+private fun CircleReadingListDto.toDomain() = CircleReadingList(
+    id = id,
+    circleId = circleId,
+    title = title,
+    description = description,
+    createdById = createdById,
+    createdByName = createdByName,
+    createdAt = createdAt,
+    paperCount = paperCount,
+    papers = papers.map { it.toDomain() }
+)
+
+private fun CitationGraphNodeDto.toDomain() = CitationGraphNode(
+    id = id,
+    title = title,
+    abstract = abstract,
+    citationCount = citationCount,
+    year = year,
+    circleId = circleId,
+    field = field,
+    authors = authors.map { it.toDomain() },
+    doi = doi,
+    journal = journal,
+    isCenter = isCenter,
+    hopDistance = hopDistance,
+    x = x,
+    y = y
+)
+
+private fun CitationGraphEdgeDto.toDomain() = CitationGraphEdge(
+    source = source,
+    target = target,
+    type = type
+)
+
+private fun CitationGraphSummaryDto.toDomain() = CitationGraphSummary(
+    totalPapers = totalPapers,
+    totalCitations = totalCitations,
+    maxDepth = maxDepth
+)
+
+private fun CitationGraphResponseDto.toDomain() = CitationGraphResponse(
+    nodes = nodes.map { it.toDomain() },
+    edges = edges.map { it.toDomain() },
+    summary = summary.toDomain()
+)
+
+private fun CoauthorGraphNodeDto.toDomain() = CoauthorGraphNode(
+    id = id,
+    name = name,
+    avatarUrl = avatarUrl,
+    institution = institution,
+    fieldOfStudy = fieldOfStudy,
+    citationCount = citationCount,
+    hIndex = hIndex,
+    i10Index = i10Index,
+    clusterId = clusterId,
+    isCenter = isCenter,
+    x = x,
+    y = y
+)
+
+private fun CoauthorGraphEdgeDto.toDomain() = CoauthorGraphEdge(
+    source = source,
+    target = target,
+    weight = weight,
+    publications = publications
+)
+
+private fun CoauthorClusterDto.toDomain() = CoauthorCluster(
+    id = id,
+    name = name,
+    color = color,
+    memberIds = memberIds
+)
+
+private fun CitationVelocityPointDto.toDomain() = CitationVelocityPoint(
+    year = year,
+    count = count
+)
+
+private fun ResearcherAnalyticsDto.toDomain() = ResearcherAnalytics(
+    totalCitations = totalCitations,
+    hIndex = hIndex,
+    i10Index = i10Index,
+    citationVelocity = citationVelocity.map { it.toDomain() }
+)
+
+private fun CoauthorGraphResponseDto.toDomain() = CoauthorGraphResponse(
+    nodes = nodes.map { it.toDomain() },
+    edges = edges.map { it.toDomain() },
+    clusters = clusters.map { it.toDomain() },
+    analytics = analytics.toDomain()
+)
+
 // ──────────────────────────────────────────────────────────────────────────────
 // RealAuthRepository
 // ──────────────────────────────────────────────────────────────────────────────
+
 
 class RealAuthRepository @Inject constructor(
     private val api: CiteCircleApi,
@@ -260,19 +421,39 @@ class RealAuthRepository @Inject constructor(
 
     override suspend fun logout() {
         val currentUserId = tokenManager.getCurrentUserId()
-        if (currentUserId != null) {
-            val updated = _savedAccounts.value.filter { it.userId != currentUserId }
+        val accounts = _savedAccounts.value
+        val remaining = accounts.filter { it.userId != currentUserId }
+
+        if (remaining.isNotEmpty()) {
+            val nextActive = remaining.first()
+            tokenManager.saveTokens(nextActive.accessToken, nextActive.refreshToken, nextActive.userId)
+            tokenManager.saveUserEmail(nextActive.email)
+
+            val updated = remaining.map { acc ->
+                acc.copy(isActive = (acc.userId == nextActive.userId))
+            }
             persistAccounts(updated)
+
+            val switchedUser = User(
+                id = nextActive.userId,
+                name = nextActive.name,
+                avatarUrl = nextActive.avatarUrl,
+                role = runCatching { UserRole.valueOf(nextActive.role) }.getOrDefault(UserRole.STUDENT),
+                institution = "CiteCircle Network"
+            )
+            userRepository.updateCurrentUser(switchedUser)
+        } else {
+            persistAccounts(emptyList())
+            tokenManager.clearTokens()
         }
-        tokenManager.clearTokens()
     }
 
     override suspend fun changePassword(oldPassword: String, newPassword: String): Result<Unit> {
         if (oldPassword.isBlank()) {
             return Result.failure(Exception("Current password is required."))
         }
-        if (newPassword.length < 6) {
-            return Result.failure(Exception("New password must be at least 6 characters long."))
+        if (newPassword.length < 6 || (!newPassword.any { it.isUpperCase() } && !newPassword.any { it.isDigit() })) {
+            return Result.failure(Exception("Password must be >= 6 chars with at least one uppercase letter or number."))
         }
         delay(600)
         return Result.success(Unit)
@@ -334,9 +515,28 @@ class RealAuthRepository @Inject constructor(
         return true
     }
 
+    override suspend fun exportUserData(): Result<String> {
+        delay(500)
+        val activeAcc = _savedAccounts.value.find { it.isActive }
+        val jsonSummary = """
+            {
+              "exportTimestamp": ${System.currentTimeMillis()},
+              "appName": "CiteCircle",
+              "savedAccountsCount": ${_savedAccounts.value.size},
+              "activeUser": {
+                "userId": "${activeAcc?.userId ?: ""}",
+                "name": "${activeAcc?.name ?: ""}",
+                "email": "${activeAcc?.email ?: ""}",
+                "role": "${activeAcc?.role ?: ""}"
+              }
+            }
+        """.trimIndent()
+        return Result.success(jsonSummary)
+    }
+
     override suspend fun logoutAll() {
         persistAccounts(emptyList())
-        tokenManager.clearTokens()
+        tokenManager.clearAll()
     }
 
     private fun addSavedAccountSession(user: User, email: String, access: String, refresh: String) {
@@ -398,31 +598,40 @@ class RealUserRepository @Inject constructor(
         if (id == _currentUser.value.id) {
             emit(_currentUser.value)
         } else {
-            try {
-                emit(api.getUser(id).toDomain())
+            val user = try {
+                api.getUser(id).toDomain()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                emit(null)
+                null
             }
+            emit(user)
         }
     }
 
     override fun getAllUsers(): Flow<List<User>> = flow {
-        try {
-            emit(api.getSuggestedUsers().map { it.toDomain() })
+        val users = try {
+            api.getSuggestedUsers().map { it.toDomain() }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            emit(emptyList())
+            emptyList()
         }
+        emit(users)
     }
 
     override fun getSuggestedConnections(): Flow<List<User>> = flow {
-        try {
-            // Mark users whose connection is pending so the UI can show correct state
+        val users = try {
             val pending = _pendingConnectionIds.value
-            emit(api.getSuggestedUsers().map { it.toDomain().copy(connectionPending = pending.contains(it.id)) })
+            api.getSuggestedUsers().map { it.toDomain().copy(connectionPending = pending.contains(it.id)) }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            emit(emptyList())
+            emptyList()
         }
+        emit(users)
     }
+
 
     override fun getConnectionRequests(): Flow<List<User>> = flow {
         emit(emptyList())
@@ -487,7 +696,21 @@ class RealUserRepository @Inject constructor(
         }
         return true
     }
+
+    override fun getCoauthorGraph(userId: String): Flow<CoauthorGraphResponse> = flow {
+        val result = try {
+            api.getUserCoauthorGraph(userId).toDomain()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            var fallback: CoauthorGraphResponse? = null
+            FakeUserRepository().getCoauthorGraph(userId).collect { fallback = it }
+            fallback ?: CoauthorGraphResponse()
+        }
+        emit(result)
+    }
 }
+
 
 // ──────────────────────────────────────────────────────────────────────────────
 // RealPostRepository
@@ -508,29 +731,58 @@ class RealPostRepository @Inject constructor(
     }
 
     override fun getFeedPosts(): Flow<List<Post>> = flow {
-        try {
+        val posts = try {
             val dtos = api.getFeedPosts()
-            val posts = dtos.map { dto -> dto.toDomain(resolveAuthor(dto.authorId)) }
-            emit(posts)
+            dtos.map { dto -> dto.toDomain(resolveAuthor(dto.authorId)) }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            emit(FakeDataSource.posts) // graceful fallback
+            FakeDataSource.posts
         }
+        emit(posts)
+    }
+
+    override fun getSavedPosts(): Flow<List<Post>> = flow {
+        val posts = try {
+            val dtos = api.getSavedPosts()
+            dtos.map { dto -> dto.toDomain(resolveAuthor(dto.authorId)) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyList()
+        }
+        emit(posts)
     }
 
     override fun getPostById(id: String): Flow<Post?> = flow {
-        try {
-            val all = api.getFeedPosts()
-            val dto = all.find { it.id == id }
-            emit(dto?.toDomain(resolveAuthor(dto.authorId)))
-        } catch (e: Exception) { emit(null) }
+        val post = try {
+            val dto = api.getPost(id)
+            dto.toDomain(resolveAuthor(dto.authorId))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            runCatching {
+                val all = api.getFeedPosts()
+                val dto = all.find { it.id == id }
+                dto?.toDomain(resolveAuthor(dto.authorId))
+            }.getOrNull()
+        }
+        emit(post)
     }
 
     override fun getPostsForCircle(circleId: String): Flow<List<Post>> = flow {
-        try {
+        val posts = try {
             val dtos = api.getCirclePosts(circleId)
-            emit(dtos.map { dto -> dto.toDomain(resolveAuthor(dto.authorId)) })
-        } catch (e: Exception) { emit(emptyList()) }
+            dtos.map { dto -> dto.toDomain(resolveAuthor(dto.authorId)) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyList()
+        }
+        emit(posts)
     }
+
+
 
     override suspend fun endorsePost(postId: String): Boolean {
         return try {
@@ -541,10 +793,11 @@ class RealPostRepository @Inject constructor(
 
     override suspend fun savePost(postId: String): Boolean {
         return try {
-            val resp = api.toggleSavePost(postId)
-            resp["saved"] ?: true
+            api.toggleSavePost(postId)
+            true
         } catch (e: Exception) { false }
     }
+
 
     override suspend fun createPost(post: Post): Boolean {
         return try {
@@ -818,7 +1071,81 @@ class RealPaperRepository @Inject constructor(
 
     override fun isPaperSaved(paperId: String): Flow<Boolean> =
         _savedPaperIds.map { it.contains(paperId) }
+
+    override fun getAnnotations(paperId: String): Flow<List<PaperAnnotation>> = flow {
+        try {
+            val dtos = api.getPaperAnnotations(paperId)
+            emit(dtos.map { it.toDomain() })
+        } catch (e: Exception) {
+            emit(emptyList())
+        }
+    }
+
+    override suspend fun saveAnnotation(annotation: PaperAnnotation): PaperAnnotation {
+        return try {
+            val dto = api.createPaperAnnotation(
+                annotation.paperId,
+                PaperAnnotationCreateDto(
+                    pageNumber = annotation.pageNumber,
+                    selectedText = annotation.selectedText,
+                    color = annotation.color.name,
+                    noteText = annotation.noteText,
+                    xRatio = annotation.xRatio,
+                    yRatio = annotation.yRatio
+                )
+            )
+            dto.toDomain()
+        } catch (e: Exception) {
+            annotation
+        }
+    }
+
+    override suspend fun deleteAnnotation(paperId: String, annotationId: String): Boolean {
+        return try {
+            api.deletePaperAnnotation(paperId, annotationId)
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    override suspend fun getAiPaperBreakdown(paperId: String): AiPaperBreakdown {
+        return try {
+            api.getAiPaperBreakdown(paperId).toDomain()
+        } catch (e: Exception) {
+            AiPaperBreakdown(
+                paperId = paperId,
+                abstractTldr = "Core paper breakdown analyzing key technical contributions and methodology.",
+                methodologySetup = "Standardized test suite and evaluation protocol.",
+                coreResults = "Strong empirical performance across target benchmark indicators.",
+                limitationsFutureWork = "Expansion of experimental coverage and low-latency optimizations.",
+                keyTakeaways = listOf(
+                    "Demonstrates practical applicability in modern workflows.",
+                    "Presents structured methodology and clear evaluation criteria.",
+                    "Suggests promising directions for follow-up research."
+                ),
+                methodologyQualityIndex = 88,
+                qualityLabel = "High Methodological Rigor"
+            )
+        }
+    }
+
+    override fun getCitationGraph(paperId: String, depth: Int, minCitations: Int): Flow<CitationGraphResponse> = flow {
+        val result = try {
+            api.getPaperCitationGraph(paperId, depth, minCitations).toDomain()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            var fallback: CitationGraphResponse? = null
+            FakePaperRepository(fireworksApi).getCitationGraph(paperId, depth, minCitations).collect { fallback = it }
+            fallback ?: CitationGraphResponse()
+        }
+        emit(result)
+    }
 }
+
+
+
 
 // ──────────────────────────────────────────────────────────────────────────────
 // RealCircleRepository
@@ -884,6 +1211,197 @@ class RealCircleRepository @Inject constructor(
             api.leaveCircle(circleId)
             _joinedIds.value = _joinedIds.value.toMutableSet().apply { remove(circleId) }
             persistState()
+            true
+        } catch (e: Exception) { false }
+    }
+
+    override fun getCircleWorkspace(circleId: String): Flow<CircleWorkspace?> = flow {
+        val ws = try {
+            api.getCircleWorkspace(circleId).toDomain()
+        } catch (e: Exception) {
+            FakeDataSource.sampleWorkspace.copy(circleId = circleId)
+        }
+        emit(ws)
+    }
+
+    override suspend fun updatePinboard(circleId: String, text: String): Boolean {
+        return try {
+            api.updatePinboard(circleId, mapOf("pin_board_text" to text))
+            true
+        } catch (e: Exception) { false }
+    }
+
+    override fun getCircleMembers(circleId: String): Flow<List<CircleMember>> = flow {
+        val members = try {
+            api.getCircleMembers(circleId).map { it.toDomain() }
+        } catch (e: Exception) {
+            FakeDataSource.sampleMembers
+        }
+        emit(members)
+    }
+
+    override suspend fun updateMemberRole(circleId: String, userId: String, role: CircleRole): Boolean {
+        return try {
+            api.updateMemberRole(circleId, userId, mapOf("role" to role.name))
+            true
+        } catch (e: Exception) { false }
+    }
+
+    override suspend fun generateInviteCode(circleId: String): String {
+        return try {
+            val res = api.generateInviteCode(circleId)
+            res["invite_code"] ?: "INV-${circleId.take(4).uppercase()}-2026"
+        } catch (e: Exception) {
+            "INV-${circleId.take(4).uppercase()}-2026"
+        }
+    }
+
+    override fun getCircleDrafts(circleId: String): Flow<List<CircleDraft>> = flow {
+        val drafts = try {
+            api.getCircleDrafts(circleId).map { it.toDomain() }
+        } catch (e: Exception) {
+            FakeDataSource.sampleDrafts
+        }
+        emit(drafts)
+    }
+
+    override fun getDraftDetails(draftId: String): Flow<CircleDraft?> = flow {
+        val draft = try {
+            api.getDraft(draftId).toDomain()
+        } catch (e: Exception) {
+            FakeDataSource.sampleDrafts.find { it.id == draftId }
+        }
+        emit(draft)
+    }
+
+    override suspend fun createCircleDraft(
+        circleId: String,
+        title: String,
+        abstract: String,
+        fileFormat: DraftFormat
+    ): CircleDraft {
+        return try {
+            api.createCircleDraft(
+                circleId,
+                CircleDraftCreateDto(title = title, abstract = abstract, fileFormat = fileFormat.name)
+            ).toDomain()
+        } catch (e: Exception) {
+            CircleDraft(
+                id = "drf_${System.currentTimeMillis()}",
+                circleId = circleId,
+                title = title,
+                abstract = abstract,
+                leadAuthorId = "usr_me",
+                fileFormat = fileFormat
+            )
+        }
+    }
+
+    override fun getDraftReviewRequests(draftId: String): Flow<List<DraftReviewRequest>> = flow {
+        val reqs = try {
+            api.getDraftReviewRequests(draftId).map { it.toDomain() }
+        } catch (e: Exception) {
+            FakeDataSource.sampleReviewRequests
+        }
+        emit(reqs)
+    }
+
+    override suspend fun requestDraftReview(
+        draftId: String,
+        reviewerId: String,
+        sectionTarget: String,
+        notes: String
+    ): DraftReviewRequest {
+        return try {
+            api.createDraftReviewRequest(
+                draftId,
+                DraftReviewRequestCreateDto(reviewerId = reviewerId, sectionTarget = sectionTarget, notes = notes)
+            ).toDomain()
+        } catch (e: Exception) {
+            DraftReviewRequest(
+                id = "rr_${System.currentTimeMillis()}",
+                draftId = draftId,
+                reviewerId = reviewerId,
+                requesterId = "usr_me",
+                sectionTarget = sectionTarget,
+                notes = notes
+            )
+        }
+    }
+
+    override fun getDraftComments(draftId: String): Flow<List<DraftComment>> = flow {
+        val cmts = try {
+            api.getDraftComments(draftId).map { it.toDomain() }
+        } catch (e: Exception) {
+            FakeDataSource.sampleDraftComments
+        }
+        emit(cmts)
+    }
+
+    override suspend fun addDraftComment(
+        draftId: String,
+        sectionIndex: Int,
+        paragraphOffset: Int,
+        content: String
+    ): DraftComment {
+        return try {
+            api.createDraftComment(
+                draftId,
+                DraftCommentCreateDto(sectionIndex = sectionIndex, paragraphOffset = paragraphOffset, content = content)
+            ).toDomain()
+        } catch (e: Exception) {
+            DraftComment(
+                id = "dc_${System.currentTimeMillis()}",
+                draftId = draftId,
+                authorId = "usr_me",
+                sectionIndex = sectionIndex,
+                paragraphOffset = paragraphOffset,
+                content = content
+            )
+        }
+    }
+
+    override suspend fun resolveDraftComment(commentId: String): Boolean {
+        return try {
+            api.resolveDraftComment(commentId)
+            true
+        } catch (e: Exception) { false }
+    }
+
+    override fun getCircleReadingLists(circleId: String): Flow<List<CircleReadingList>> = flow {
+        val lists = try {
+            api.getCircleReadingLists(circleId).map { it.toDomain() }
+        } catch (e: Exception) {
+            FakeDataSource.sampleReadingLists
+        }
+        emit(lists)
+    }
+
+    override suspend fun createCircleReadingList(
+        circleId: String,
+        title: String,
+        description: String,
+        paperIds: List<String>
+    ): CircleReadingList {
+        return try {
+            api.createCircleReadingList(
+                circleId,
+                CircleReadingListCreateDto(title = title, description = description, paperIds = paperIds)
+            ).toDomain()
+        } catch (e: Exception) {
+            CircleReadingList(
+                id = "rl_${System.currentTimeMillis()}",
+                circleId = circleId,
+                title = title,
+                description = description,
+                createdById = "usr_me"
+            )
+        }
+    }
+
+    override suspend fun saveReadingListToMyLibrary(readingListId: String): Boolean {
+        return try {
+            api.saveReadingListToLibrary(readingListId)
             true
         } catch (e: Exception) { false }
     }

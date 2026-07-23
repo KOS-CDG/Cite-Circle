@@ -8,7 +8,8 @@ import { PostCard } from '@/components/post-card';
 import { PostComposerModal } from '@/components/post-composer-modal';
 import { useAppTheme } from '@/components/ui/theme-provider';
 import { ApiError, apiClient } from '@/lib/api-client';
-import type { EndorsePostResult, Post, PostFlair, PostType } from '@/types';
+import type { EndorsePostResult, Post, PostFlair, PostType, SavePostResult } from '@/types';
+
 
 const PAGE_SIZE = 20;
 
@@ -141,6 +142,22 @@ export default function FeedScreen() {
     }
   }
 
+  async function onSave(postId: string) {
+    setPosts((current) =>
+      current.map((post) => (post.id === postId ? { ...post, is_saved: !post.is_saved } : post)),
+    );
+    try {
+      const result = await apiClient.post<SavePostResult>(`/posts/${postId}/save`);
+      setPosts((current) =>
+        current.map((post) => (post.id === postId ? { ...post, is_saved: result.saved } : post)),
+      );
+    } catch {
+      setPosts((current) =>
+        current.map((post) => (post.id === postId ? { ...post, is_saved: !post.is_saved } : post)),
+      );
+    }
+  }
+
   const visiblePosts = posts.filter((post) => matchesCategory(post, category));
 
   return (
@@ -199,8 +216,14 @@ export default function FeedScreen() {
             keyExtractor={(post) => post.id}
             contentContainerClassName="gap-3 px-4 pb-6"
             renderItem={({ item }) => (
-              <PostCard post={item} onPress={(postId) => router.push(`/post/${postId}`)} onEndorse={onEndorse} />
+              <PostCard
+                post={item}
+                onPress={(postId) => router.push(`/post/${postId}`)}
+                onEndorse={onEndorse}
+                onSave={onSave}
+              />
             )}
+
             refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={colors.accent} />}
             onEndReachedThreshold={0.4}
             onEndReached={onEndReached}

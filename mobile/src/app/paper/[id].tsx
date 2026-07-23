@@ -266,31 +266,42 @@ export default function PaperDetailScreen() {
           </View>
         </View>
 
-        <View className="mt-6 flex-row gap-3">
-          <Pressable
-            onPress={citePaper}
-            disabled={isCiting}
-            className="flex-1 flex-row items-center justify-center gap-2 rounded-xl bg-academic-maroon px-4 py-3 dark:bg-[#C6635E]"
-          >
-            {isCiting ? <ActivityIndicator size="small" color="#FBF9F4" /> : <Quote size={16} color="#FBF9F4" />}
-            <Text className="text-sm font-semibold text-academic-paper">Cite Paper</Text>
-          </Pressable>
+        <View className="mt-6 flex-col gap-3">
+          <View className="flex-row gap-3">
+            <Pressable
+              onPress={citePaper}
+              disabled={isCiting}
+              className="flex-1 flex-row items-center justify-center gap-2 rounded-xl bg-academic-maroon px-4 py-3 dark:bg-[#C6635E]"
+            >
+              {isCiting ? <ActivityIndicator size="small" color="#FBF9F4" /> : <Quote size={16} color="#FBF9F4" />}
+              <Text className="text-sm font-semibold text-academic-paper">Cite Paper</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => paper.pdf_url && setShowPdf(true)}
+              disabled={!paper.pdf_url}
+              className={`flex-1 flex-row items-center justify-center gap-2 rounded-xl border px-4 py-3 ${
+                paper.pdf_url
+                  ? 'border-academic-gold/40 bg-academic-parchment dark:border-academic-gold/30 dark:bg-[#1F1F26]'
+                  : 'border-academic-gold/15 bg-academic-parchment/50 opacity-50 dark:border-[#33333D] dark:bg-[#1F1F26]/50'
+              }`}
+            >
+              <FileText size={16} color={colors.accent} />
+              <Text className="text-sm font-semibold text-academic-ink dark:text-[#EFEAE0]">
+                {paper.pdf_url ? 'Read PDF' : 'No PDF'}
+              </Text>
+            </Pressable>
+          </View>
 
           <Pressable
-            onPress={() => paper.pdf_url && setShowPdf(true)}
-            disabled={!paper.pdf_url}
-            className={`flex-1 flex-row items-center justify-center gap-2 rounded-xl border px-4 py-3 ${
-              paper.pdf_url
-                ? 'border-academic-gold/40 bg-academic-parchment dark:border-academic-gold/30 dark:bg-[#1F1F26]'
-                : 'border-academic-gold/15 bg-academic-parchment/50 opacity-50 dark:border-[#33333D] dark:bg-[#1F1F26]/50'
-            }`}
+            onPress={() => router.push({ pathname: '/citation-graph', params: { paper_id: paper.id, initialMode: 'citations' } })}
+            className="flex-row items-center justify-center gap-2 rounded-xl border border-academic-gold/30 bg-academic-gold/10 py-3 dark:border-academic-gold/20 dark:bg-[#252530]"
           >
-            <FileText size={16} color={colors.accent} />
-            <Text className="text-sm font-semibold text-academic-ink dark:text-[#EFEAE0]">
-              {paper.pdf_url ? 'Read PDF' : 'No PDF'}
-            </Text>
+            <Sparkles size={16} color={colors.accent} />
+            <Text className="text-sm font-bold text-academic-ink dark:text-[#EFEAE0]">Explore Citation Lineage Graph</Text>
           </Pressable>
         </View>
+
       </ScrollView>
 
       <PdfViewerModal visible={showPdf} pdfUrl={paper.pdf_url} onClose={() => setShowPdf(false)} />

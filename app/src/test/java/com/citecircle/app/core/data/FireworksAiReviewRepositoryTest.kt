@@ -30,12 +30,15 @@ class FireworksAiReviewRepositoryTest {
               "citations": 75,
               "clarity": 88,
               "originality": 82,
+              "verdict": "ACCEPT",
+              "summary": "Strong submission.",
               "suggestions": [
                 {
                   "id": "s1",
                   "section": "Abstract",
                   "text": "The abstract should be expanded.",
                   "severity": "MODERATE",
+                  "passageQuote": "We sampled 50 users.",
                   "isAddressed": false
                 }
               ]
@@ -48,8 +51,10 @@ class FireworksAiReviewRepositoryTest {
         assertEquals(75, report.citations)
         assertEquals(88, report.clarity)
         assertEquals(82, report.originality)
+        assertEquals("ACCEPT", report.verdict)
         assertEquals(1, report.suggestions.size)
         assertEquals("Abstract", report.suggestions[0].section)
+        assertEquals("We sampled 50 users.", report.suggestions[0].passageQuote)
     }
 
     @Test
@@ -64,12 +69,14 @@ class FireworksAiReviewRepositoryTest {
                       "citations": 88,
                       "clarity": 90,
                       "originality": 94,
+                      "verdict": "ACCEPT",
                       "suggestions": [
                         {
                           "id": "s1",
                           "section": "Methodology",
                           "text": "Clarify statistical sample size.",
                           "severity": "MINOR",
+                          "passageQuote": "n = 48 participants.",
                           "isAddressed": false
                         }
                       ]
@@ -89,12 +96,14 @@ class FireworksAiReviewRepositoryTest {
         val repository = FireworksAiReviewRepository(fakeApi, json)
         val draft = PaperDraft(
             title = "Situated Cognition in AI-Augmented Workspaces",
-            abstract = "This paper explores situated cognition in modern software engineering environments."
+            abstract = "This paper explores situated cognition in modern software engineering environments.",
+            fullText = "# Introduction\nSituated cognition...\n# Methods\nLab study..."
         )
 
         val report = repository.reviewPaper(draft)
         assertNotNull(report)
         assertEquals(92, report.score)
         assertEquals(95, report.structure)
+        assertEquals("ACCEPT", report.verdict)
     }
 }

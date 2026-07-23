@@ -4,10 +4,12 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { PostCard } from '@/components/post-card';
 import { Button } from '@/components/ui/button';
 import { useAppTheme } from '@/components/ui/theme-provider';
 import { ApiError, apiClient } from '@/lib/api-client';
-import type { Paper, Shelf, ShelfCreate } from '@/types';
+import type { EndorsePostResult, Paper, Post, SavePostResult, Shelf, ShelfCreate } from '@/types';
+
 
 const MOCK_LIBRARY_SHELVES: Shelf[] = [
   {
@@ -60,10 +62,11 @@ export default function LibraryScreen() {
 
   const [shelves, setShelves] = useState<Shelf[]>([]);
   const [papers, setPapers] = useState<Paper[]>([]);
+  const [savedPosts, setSavedPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [selectedTab, setSelectedTab] = useState<'saved' | 'shelves'>('saved');
+  const [selectedTab, setSelectedTab] = useState<'papers' | 'posts' | 'shelves'>('papers');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeShelfId, setActiveShelfId] = useState<string | null>(null);
   const [showCreateShelf, setShowCreateShelf] = useState(false);
@@ -71,18 +74,23 @@ export default function LibraryScreen() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const shelvesData = await apiClient.get<Shelf[]>('/shelves');
+      const [shelvesData, postsData] = await Promise.all([
+        apiClient.get<Shelf[]>('/shelves').catch(() => []),
+        apiClient.get<Post[]>('/posts/saved').catch(() => []),
+      ]);
       const savedIds = new Set(shelvesData.flatMap((shelf) => shelf.paper_ids));
       let papersData: Paper[] = [];
       if (savedIds.size > 0) {
-        const allPapers = await apiClient.get<Paper[]>('/papers?limit=200');
+        const allPapers = await apiClient.get<Paper[]>('/papers?limit=200').catch(() => []);
         papersData = allPapers.filter((paper) => savedIds.has(paper.id));
       }
-      setShelves(shelvesData.length > 0 ? shelvesData : MOCK_LIBRARY_SHELVES);
-      setPapers(papersData.length > 0 ? papersData : MOCK_LIBRARY_PAPERS);
+      setShelves(shelvesData);
+      setPapers(papersData);
+      setSavedPosts(postsData);
     } catch {
-      setShelves(MOCK_LIBRARY_SHELVES);
-      setPapers(MOCK_LIBRARY_PAPERS);
+      setShelves([]);
+      setPapers([]);
+      setSavedPosts([]);
     }
   }, []);
 
@@ -99,6 +107,12 @@ export default function LibraryScreen() {
     return papers.filter((paper) => paper.title.toLowerCase().includes(query) || paper.journal.toLowerCase().includes(query));
   }, [papers, searchQuery]);
 
+  const filteredPosts = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return savedPosts;
+    return savedPosts.filter((post) => post.content.toLowerCase().includes(query));
+  }, [savedPosts, searchQuery]);
+
   const filteredShelves = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return shelves;
@@ -111,6 +125,41 @@ export default function LibraryScreen() {
     if (!activeShelf) return [];
     return papers.filter((paper) => activeShelf.paper_ids.includes(paper.id));
   }, [activeShelf, papers]);
+
+  async function onEndorsePost(postId: string) {
+    setSavedPosts((current) =>
+      current.map((post) =>
+        post.id === postId
+          ? { ...post, is_endorsed: !post.is_endorsed, endorse_count: post.endorse_count + (post.is_endorsed ? -1 : 1) }
+          : post,
+      ),
+    );
+    try {
+      const result = await apiClient.post<EndorsePostResult>(`/posts/${postId}/endorse`);
+      setSavedPosts((current) =>
+        current.map((post) =>
+          post.id === postId ? { ...post, is_endorsed: result.endorsed, endorse_count: result.endorse_count } : post,
+        ),
+      );
+    } catch {
+      setSavedPosts((current) =>
+        current.map((post) =>
+          post.id === postId
+            ? { ...post, is_endorsed: !post.is_endorsed, endorse_count: post.endorse_count + (post.is_endorsed ? -1 : 1) }
+            : post,
+        ),
+      );
+    }
+  }
+
+  async function onSavePost(postId: string) {
+    setSavedPosts((current) => current.filter((post) => post.id !== postId));
+    try {
+      await apiClient.post<SavePostResult>(`/posts/${postId}/save`);
+    } catch {
+      await load();
+    }
+  }
 
   async function createShelf(name: string, description: string) {
     try {
@@ -136,6 +185,7 @@ export default function LibraryScreen() {
   }
 
   async function unsavePaper(paperId: string) {
+
     const containing = shelves.filter((shelf) => shelf.paper_ids.includes(paperId));
     setShelves((current) =>
       current.map((shelf) =>
@@ -205,14 +255,25 @@ export default function LibraryScreen() {
 
           <View className="mx-4 mb-2 flex-row rounded-xl bg-academic-parchment p-1 dark:bg-[#1F1F26]">
             <Pressable
-              onPress={() => setSelectedTab('saved')}
-              className={`flex-1 items-center rounded-lg py-2 ${selectedTab === 'saved' ? 'bg-white dark:bg-[#2A2A33]' : ''}`}
+              onPress={() => setSelectedTab('papers')}
+              className={`flex-1 items-center rounded-lg py-2 ${selectedTab === 'papers' ? 'bg-white dark:bg-[#2A2A33]' : ''}`}
             >
               <Text
-                className="text-sm font-semibold"
-                style={{ color: selectedTab === 'saved' ? colors.text : colors.textSecondary }}
+                className="text-xs font-semibold"
+                style={{ color: selectedTab === 'papers' ? colors.text : colors.textSecondary }}
               >
-                Saved Papers ({papers.length})
+                Papers ({papers.length})
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setSelectedTab('posts')}
+              className={`flex-1 items-center rounded-lg py-2 ${selectedTab === 'posts' ? 'bg-white dark:bg-[#2A2A33]' : ''}`}
+            >
+              <Text
+                className="text-xs font-semibold"
+                style={{ color: selectedTab === 'posts' ? colors.text : colors.textSecondary }}
+              >
+                Posts ({savedPosts.length})
               </Text>
             </Pressable>
             <Pressable
@@ -220,7 +281,7 @@ export default function LibraryScreen() {
               className={`flex-1 items-center rounded-lg py-2 ${selectedTab === 'shelves' ? 'bg-white dark:bg-[#2A2A33]' : ''}`}
             >
               <Text
-                className="text-sm font-semibold"
+                className="text-xs font-semibold"
                 style={{ color: selectedTab === 'shelves' ? colors.text : colors.textSecondary }}
               >
                 Shelves ({shelves.length})
@@ -249,7 +310,7 @@ export default function LibraryScreen() {
             ))
           )}
         </ScrollView>
-      ) : selectedTab === 'saved' ? (
+      ) : selectedTab === 'papers' ? (
         <ScrollView contentContainerClassName="gap-3 p-4">
           {filteredPapers.length === 0 ? (
             <EmptyState
@@ -268,7 +329,28 @@ export default function LibraryScreen() {
             ))
           )}
         </ScrollView>
+      ) : selectedTab === 'posts' ? (
+        <ScrollView contentContainerClassName="gap-3 p-4">
+          {filteredPosts.length === 0 ? (
+            <EmptyState
+              emoji="🔖"
+              title={searchQuery ? 'No match found' : 'No saved posts'}
+              subtitle={searchQuery ? 'Try a different search term.' : 'Save posts by tapping the bookmark icon on post cards.'}
+            />
+          ) : (
+            filteredPosts.map((post) => (
+              <PostCard
+                key={post.id}
+                post={{ ...post, is_saved: true }}
+                onPress={(id) => router.push(`/post/${id}`)}
+                onEndorse={onEndorsePost}
+                onSave={onSavePost}
+              />
+            ))
+          )}
+        </ScrollView>
       ) : (
+
         <ScrollView contentContainerClassName="gap-3 p-4">
           {filteredShelves.length === 0 ? (
             <EmptyState

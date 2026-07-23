@@ -16,6 +16,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -40,7 +42,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Settings ViewModel
+// Settings ViewModel & State
 // ──────────────────────────────────────────────────────────────────────────────
 
 sealed interface ActiveSettingsDialog {
@@ -50,15 +52,18 @@ sealed interface ActiveSettingsDialog {
     object AddAccount : ActiveSettingsDialog
     object ConfirmClearCache : ActiveSettingsDialog
     object ConfirmLogoutAll : ActiveSettingsDialog
+    data class ExportDataSummary(val jsonContent: String) : ActiveSettingsDialog
 }
 
 data class SettingsUiState(
     val currentUser: User? = null,
     val savedAccounts: List<SavedAccount> = emptyList(),
+    val currentTheme: AppTheme = AppTheme.SYSTEM,
     val endorsementsEnabled: Boolean = true,
     val commentsEnabled: Boolean = true,
     val connectionsEnabled: Boolean = true,
     val citationsEnabled: Boolean = true,
+    val aiAlertsEnabled: Boolean = true,
     val emailDigest: String = "Daily",
     val isProcessing: Boolean = false,
     val activeDialog: ActiveSettingsDialog = ActiveSettingsDialog.None,
@@ -76,17 +81,22 @@ class SettingsViewModel @Inject constructor(
     val uiState: StateFlow<SettingsUiState> = combine(
         userRepository.getCurrentUser(),
         authRepository.getSavedAccounts(),
+        themeRepository.getTheme(),
         _uiState
-    ) { user, savedAccounts, state ->
+    ) { user, savedAccounts, theme, state ->
         state.copy(
             currentUser = user,
-            savedAccounts = savedAccounts
+            savedAccounts = savedAccounts,
+            currentTheme = theme
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsUiState())
 
     fun updateTheme(theme: AppTheme) {
         viewModelScope.launch {
             themeRepository.setTheme(theme)
+            _uiState.value = _uiState.value.copy(
+                messageSnackbar = "Theme set to ${theme.name.lowercase().replaceFirstChar { it.uppercase() }}"
+            )
         }
     }
 
@@ -136,7 +146,7 @@ class SettingsViewModel @Inject constructor(
             val success = authRepository.switchAccount(userId)
             _uiState.value = _uiState.value.copy(
                 isProcessing = false,
-                messageSnackbar = if (success) "Switched account successfully" else "Failed to switch account"
+                messageSnackbar = if (success) "Switched active account session" else "Failed to switch account"
             )
         }
     }
@@ -148,7 +158,7 @@ class SettingsViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(
                 isProcessing = false,
                 activeDialog = ActiveSettingsDialog.None,
-                messageSnackbar = if (result.isSuccess) "Account $email added!" else (result.exceptionOrNull()?.message ?: "Failed to add account")
+                messageSnackbar = if (result.isSuccess) "Account $email authenticated & added!" else (result.exceptionOrNull()?.message ?: "Failed to add account")
             )
         }
     }
@@ -167,7 +177,19 @@ class SettingsViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(
                 isProcessing = false,
                 activeDialog = ActiveSettingsDialog.None,
-                messageSnackbar = "App cache & temporary files cleared (14.2 MB freed)"
+                messageSnackbar = "App cache & temporary files cleared (~14.2 MB freed)"
+            )
+        }
+    }
+
+    fun exportUserData() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isProcessing = true)
+            val result = authRepository.exportUserData()
+            _uiState.value = _uiState.value.copy(
+                isProcessing = false,
+                activeDialog = if (result.isSuccess) ActiveSettingsDialog.ExportDataSummary(result.getOrDefault("")) else ActiveSettingsDialog.None,
+                messageSnackbar = if (result.isFailure) "Failed to export user data" else null
             )
         }
     }
@@ -175,6 +197,7 @@ class SettingsViewModel @Inject constructor(
     fun logoutCurrent(onLogoutComplete: () -> Unit) {
         viewModelScope.launch {
             authRepository.logout()
+            _uiState.value = _uiState.value.copy(messageSnackbar = "Session logged out")
             onLogoutComplete()
         }
     }
@@ -191,6 +214,7 @@ class SettingsViewModel @Inject constructor(
     fun setComments(enabled: Boolean) { _uiState.value = _uiState.value.copy(commentsEnabled = enabled) }
     fun setConnections(enabled: Boolean) { _uiState.value = _uiState.value.copy(connectionsEnabled = enabled) }
     fun setCitations(enabled: Boolean) { _uiState.value = _uiState.value.copy(citationsEnabled = enabled) }
+    fun setAiAlerts(enabled: Boolean) { _uiState.value = _uiState.value.copy(aiAlertsEnabled = enabled) }
     fun setEmailDigest(digest: String) { _uiState.value = _uiState.value.copy(emailDigest = digest) }
 }
 
@@ -258,28 +282,28 @@ fun SettingsScreen(
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(text = user.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
-                                    Text(text = "${user.role.name} • ${user.institution}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.ccColors.marginGray)
+                                    Text(text = "${user.role.name} • ${user.institution.ifBlank { "CiteCircle Scholar" }}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.ccColors.marginGray)
                                 }
-                                CcChip(label = "Edit", selected = false, onClick = onEditProfileClick)
+                                CcChip(label = "Edit Profile", selected = false, onClick = onEditProfileClick)
                             }
-                            Divider(color = MaterialTheme.ccColors.divider, modifier = Modifier.padding(bottom = 12.dp))
+                            HorizontalDivider(color = MaterialTheme.ccColors.divider, modifier = Modifier.padding(bottom = 12.dp))
                         }
 
                         // Change Password Row
                         SettingsActionRow(
                             icon = Icons.Outlined.Lock,
                             title = "Change Password",
-                            subtitle = "Update your login password and security settings",
+                            subtitle = "Update your account password with real-time strength validation",
                             onClick = { viewModel.openDialog(ActiveSettingsDialog.ChangePassword) }
                         )
 
-                        Divider(color = MaterialTheme.ccColors.divider, modifier = Modifier.padding(vertical = 8.dp))
+                        HorizontalDivider(color = MaterialTheme.ccColors.divider, modifier = Modifier.padding(vertical = 8.dp))
 
                         // Change Email Row
                         SettingsActionRow(
                             icon = Icons.Outlined.Email,
                             title = "Change Email Address",
-                            subtitle = "Update your primary email address for notifications",
+                            subtitle = "Update your primary email address for identity & notifications",
                             onClick = { viewModel.openDialog(ActiveSettingsDialog.ChangeEmail) }
                         )
                     }
@@ -307,7 +331,7 @@ fun SettingsScreen(
                 CcCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         if (state.savedAccounts.isEmpty()) {
-                            Text("No saved accounts found.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.ccColors.marginGray)
+                            Text("No saved secondary sessions found.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.ccColors.marginGray)
                         } else {
                             state.savedAccounts.forEachIndexed { index, account ->
                                 Row(
@@ -325,7 +349,7 @@ fun SettingsScreen(
                                 ) {
                                     Box(
                                         modifier = Modifier
-                                            .size(40.dp)
+                                            .size(42.dp)
                                             .clip(CircleShape)
                                             .background(CcColors.CircleBlue),
                                         contentAlignment = Alignment.Center
@@ -333,14 +357,29 @@ fun SettingsScreen(
                                         Text(
                                             text = account.name.take(1).uppercase(),
                                             color = Color.White,
-                                            fontWeight = FontWeight.Bold
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.titleMedium
                                         )
                                     }
 
                                     Spacer(modifier = Modifier.width(12.dp))
 
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(text = account.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(text = account.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Surface(
+                                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                                shape = RoundedCornerShape(8.dp)
+                                            ) {
+                                                Text(
+                                                    text = account.role,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                    fontSize = 10.sp
+                                                )
+                                            }
+                                        }
                                         Text(text = account.email, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.ccColors.marginGray)
                                     }
 
@@ -354,7 +393,7 @@ fun SettingsScreen(
                                                 color = Color.White,
                                                 style = MaterialTheme.typography.labelSmall,
                                                 fontWeight = FontWeight.Bold,
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                                             )
                                         }
                                     } else {
@@ -365,7 +404,7 @@ fun SettingsScreen(
                                 }
 
                                 if (index < state.savedAccounts.size - 1) {
-                                    Divider(color = MaterialTheme.ccColors.divider, modifier = Modifier.padding(vertical = 4.dp))
+                                    HorizontalDivider(color = MaterialTheme.ccColors.divider, modifier = Modifier.padding(vertical = 4.dp))
                                 }
                             }
                         }
@@ -390,8 +429,8 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             CcChip(
-                                label = "Light Mode",
-                                selected = !isDarkTheme,
+                                label = "Light",
+                                selected = state.currentTheme == AppTheme.LIGHT,
                                 onClick = {
                                     onThemeChange(false)
                                     viewModel.updateTheme(AppTheme.LIGHT)
@@ -400,11 +439,20 @@ fun SettingsScreen(
                             )
 
                             CcChip(
-                                label = "Dark Mode",
-                                selected = isDarkTheme,
+                                label = "Dark",
+                                selected = state.currentTheme == AppTheme.DARK,
                                 onClick = {
                                     onThemeChange(true)
                                     viewModel.updateTheme(AppTheme.DARK)
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            CcChip(
+                                label = "System Default",
+                                selected = state.currentTheme == AppTheme.SYSTEM,
+                                onClick = {
+                                    viewModel.updateTheme(AppTheme.SYSTEM)
                                 },
                                 modifier = Modifier.weight(1f)
                             )
@@ -423,14 +471,16 @@ fun SettingsScreen(
                 CcCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         NotificationSwitchRow(label = "Endorsements & Likes", checked = state.endorsementsEnabled, onCheckedChange = { viewModel.setEndorsements(it) })
-                        Divider(color = MaterialTheme.ccColors.divider, modifier = Modifier.padding(vertical = 8.dp))
+                        HorizontalDivider(color = MaterialTheme.ccColors.divider, modifier = Modifier.padding(vertical = 8.dp))
                         NotificationSwitchRow(label = "Comments & Replies", checked = state.commentsEnabled, onCheckedChange = { viewModel.setComments(it) })
-                        Divider(color = MaterialTheme.ccColors.divider, modifier = Modifier.padding(vertical = 8.dp))
+                        HorizontalDivider(color = MaterialTheme.ccColors.divider, modifier = Modifier.padding(vertical = 8.dp))
                         NotificationSwitchRow(label = "Connection Requests", checked = state.connectionsEnabled, onCheckedChange = { viewModel.setConnections(it) })
-                        Divider(color = MaterialTheme.ccColors.divider, modifier = Modifier.padding(vertical = 8.dp))
-                        NotificationSwitchRow(label = "Citation & AI Alerts", checked = state.citationsEnabled, onCheckedChange = { viewModel.setCitations(it) })
+                        HorizontalDivider(color = MaterialTheme.ccColors.divider, modifier = Modifier.padding(vertical = 8.dp))
+                        NotificationSwitchRow(label = "Paper Citations & Alerts", checked = state.citationsEnabled, onCheckedChange = { viewModel.setCitations(it) })
+                        HorizontalDivider(color = MaterialTheme.ccColors.divider, modifier = Modifier.padding(vertical = 8.dp))
+                        NotificationSwitchRow(label = "AI Copilot Notifications", checked = state.aiAlertsEnabled, onCheckedChange = { viewModel.setAiAlerts(it) })
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
                         Text("Email Digest Frequency", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                         Spacer(modifier = Modifier.height(8.dp))
 
@@ -458,9 +508,18 @@ fun SettingsScreen(
                     Column(modifier = Modifier.padding(16.dp)) {
                         SettingsActionRow(
                             icon = Icons.Outlined.CleaningServices,
-                            title = "Clear App Cache & Data",
-                            subtitle = "Free up temporary PDF cache, paper summaries, and search indices",
+                            title = "Clear App Cache & Storage (~14.2 MB)",
+                            subtitle = "Free up temporary PDF manuscript files, paper summaries, and search indices",
                             onClick = { viewModel.openDialog(ActiveSettingsDialog.ConfirmClearCache) }
+                        )
+
+                        HorizontalDivider(color = MaterialTheme.ccColors.divider, modifier = Modifier.padding(vertical = 8.dp))
+
+                        SettingsActionRow(
+                            icon = Icons.Outlined.Download,
+                            title = "Export User Data Summary",
+                            subtitle = "Generate and download a JSON summary of your profile, accounts & saved items",
+                            onClick = { viewModel.exportUserData() }
                         )
                     }
                 }
@@ -504,7 +563,7 @@ fun SettingsScreen(
     // Modal Dialogs
     // ──────────────────────────────────────────────────────────────────────────────
 
-    when (state.activeDialog) {
+    when (val currentDialog = state.activeDialog) {
         ActiveSettingsDialog.ChangePassword -> {
             ChangePasswordDialog(
                 onDismiss = { viewModel.dismissDialog() },
@@ -534,7 +593,7 @@ fun SettingsScreen(
             AlertDialog(
                 onDismissRequest = { viewModel.dismissDialog() },
                 title = { Text("Clear App Cache?") },
-                text = { Text("This will delete local search queries, paper summary caches, and temporary download files. Your account data will remain safe.") },
+                text = { Text("This will wipe ~14.2 MB of local PDF manuscript cache, paper summaries, and search indices. Your account and saved items will remain intact.") },
                 confirmButton = {
                     TextButton(onClick = { viewModel.clearCache() }) {
                         Text("Clear Cache", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
@@ -549,7 +608,7 @@ fun SettingsScreen(
             AlertDialog(
                 onDismissRequest = { viewModel.dismissDialog() },
                 title = { Text("Log Out All Accounts?") },
-                text = { Text("This will sign out all saved accounts from this device and return to the onboarding screen.") },
+                text = { Text("This will sign out all saved sessions from this device, wipe DataStore tokens, and return to the onboarding screen.") },
                 confirmButton = {
                     TextButton(onClick = { viewModel.logoutAllAccounts(onLogout) }) {
                         Text("Log Out All", fontWeight = FontWeight.Bold, color = CcColors.CoralPop)
@@ -558,6 +617,12 @@ fun SettingsScreen(
                 dismissButton = {
                     TextButton(onClick = { viewModel.dismissDialog() }) { Text("Cancel") }
                 }
+            )
+        }
+        is ActiveSettingsDialog.ExportDataSummary -> {
+            ExportDataDialog(
+                jsonContent = currentDialog.jsonContent,
+                onDismiss = { viewModel.dismissDialog() }
             )
         }
         ActiveSettingsDialog.None -> {}
@@ -602,6 +667,11 @@ fun ChangePasswordDialog(
     var newPass by remember { mutableStateOf("") }
     var confirmPass by remember { mutableStateOf("") }
 
+    val hasMinLength = newPass.length >= 6
+    val hasUpperOrDigit = newPass.any { it.isUpperCase() } || newPass.any { it.isDigit() }
+    val isMatching = newPass.isNotEmpty() && newPass == confirmPass
+    val isValid = oldPass.isNotBlank() && hasMinLength && hasUpperOrDigit && isMatching
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Change Password", fontWeight = FontWeight.Bold) },
@@ -631,10 +701,20 @@ fun ChangePasswordDialog(
                     visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                // Validation indicators checklist
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 4.dp)) {
+                    ValidationCheckItem(label = "At least 6 characters", checked = hasMinLength)
+                    ValidationCheckItem(label = "Contains uppercase letter or number", checked = hasUpperOrDigit)
+                    ValidationCheckItem(label = "Passwords match", checked = isMatching)
+                }
             }
         },
         confirmButton = {
-            Button(onClick = { onConfirm(oldPass, newPass, confirmPass) }) {
+            Button(
+                onClick = { onConfirm(oldPass, newPass, confirmPass) },
+                enabled = isValid
+            ) {
                 Text("Update Password")
             }
         },
@@ -642,6 +722,24 @@ fun ChangePasswordDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
+}
+
+@Composable
+fun ValidationCheckItem(label: String, checked: Boolean) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            imageVector = if (checked) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
+            contentDescription = null,
+            tint = if (checked) Color(0xFF2E7D32) else MaterialTheme.ccColors.marginGray,
+            modifier = Modifier.size(16.dp)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (checked) Color(0xFF2E7D32) else MaterialTheme.ccColors.marginGray
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -669,7 +767,7 @@ fun ChangeEmailDialog(
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = { Text("Current Password (to verify)") },
+                    label = { Text("Current Password (identity check)") },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth()
@@ -677,7 +775,10 @@ fun ChangeEmailDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { onConfirm(newEmail, password) }) {
+            Button(
+                onClick = { onConfirm(newEmail, password) },
+                enabled = newEmail.contains("@") && password.isNotBlank()
+            ) {
                 Text("Update Email")
             }
         },
@@ -701,7 +802,7 @@ fun AddAccountDialog(
         title = { Text("Add Secondary Account", fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Sign in with another CiteCircle account to switch between them quickly.", style = MaterialTheme.typography.bodySmall)
+                Text("Sign in with another CiteCircle account to switch between active profiles quickly.", style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(
                     value = email,
                     onValueChange = { email = it },
@@ -720,12 +821,58 @@ fun AddAccountDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { onConfirm(email, password) }) {
+            Button(
+                onClick = { onConfirm(email, password) },
+                enabled = email.contains("@") && password.isNotBlank()
+            ) {
                 Text("Sign In & Add")
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+@Composable
+fun ExportDataDialog(
+    jsonContent: String,
+    onDismiss: () -> Unit
+) {
+    val clipboardManager = LocalClipboardManager.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("User Data Summary (JSON)", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Below is your exported user session & data summary:", style = MaterialTheme.typography.bodySmall)
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp)
+                ) {
+                    Text(
+                        text = jsonContent,
+                        fontFamily = JetBrainsMonoFamily,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(10.dp)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                clipboardManager.setText(AnnotatedString(jsonContent))
+                onDismiss()
+            }) {
+                Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Copy JSON")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
         }
     )
 }
@@ -762,4 +909,3 @@ fun NotificationSwitchRow(
         )
     }
 }
-

@@ -162,8 +162,10 @@ fun PaperDetailScreen(
     paperId: String,
     onBack: () -> Unit,
     onAuthorClick: (String) -> Unit,
+    onReadPaperClick: (String) -> Unit = {},
     viewModel: PaperDetailViewModel = hiltViewModel()
 ) {
+
     LaunchedEffect(paperId) {
         viewModel.loadPaperData(paperId)
     }
@@ -384,25 +386,36 @@ fun PaperDetailScreen(
                     }
 
                     // Interactive Action Button links
-                    Row(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
                         CcPrimaryButton(
-                            text = "Cite Paper",
-                            onClick = {
-                                val textCitation = "${p.authors.firstOrNull()?.name ?: "Unknown"} et al. (${p.year}). ${p.title}. ${p.journal}. DOI: ${p.doi}"
-                                clipboardManager.setText(AnnotatedString(textCitation))
-                                viewModel.citePaper(p.id)
-                            },
-                            icon = Icons.Outlined.ContentCopy,
-                            modifier = Modifier.weight(1f).padding(end = 8.dp)
+                            text = "📖 Read Preprint / Interactive PDF Studio",
+                            onClick = { onReadPaperClick(p.id) },
+                            modifier = Modifier.fillMaxWidth()
                         )
 
-                        CcSecondaryButton(
-                            text = "Download PDF",
-                            onClick = {},
-                            icon = Icons.Outlined.Description,
-                            modifier = Modifier.weight(1f).padding(start = 8.dp)
-                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            CcSecondaryButton(
+                                text = "Cite Paper",
+                                onClick = {
+                                    val textCitation = "${p.authors.firstOrNull()?.name ?: "Unknown"} et al. (${p.year}). ${p.title}. ${p.journal}. DOI: ${p.doi}"
+                                    clipboardManager.setText(AnnotatedString(textCitation))
+                                    viewModel.citePaper(p.id)
+                                },
+                                icon = Icons.Outlined.ContentCopy,
+                                modifier = Modifier.weight(1f).padding(end = 8.dp)
+                            )
+
+                            CcSecondaryButton(
+                                text = "Download PDF",
+                                onClick = { onReadPaperClick(p.id) },
+                                icon = Icons.Outlined.Description,
+                                modifier = Modifier.weight(1f).padding(start = 8.dp)
+                            )
+                        }
                     }
+
 
                     Spacer(modifier = Modifier.height(24.dp))
                 }

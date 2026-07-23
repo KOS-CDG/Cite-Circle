@@ -20,7 +20,7 @@ import { useAppTheme } from '@/components/ui/theme-provider';
 import { formatRelativeTime, roleEmoji } from '@/lib/format';
 import { ApiError, apiClient } from '@/lib/api-client';
 import { useUserById } from '@/lib/user-cache';
-import type { Comment, CommentCreate, EndorsePostResult, Post } from '@/types';
+import type { Comment, CommentCreate, EndorsePostResult, Post, SavePostResult } from '@/types';
 
 export default function PostDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -80,6 +80,18 @@ export default function PostDetailScreen() {
     }
   }
 
+  async function onSavePost() {
+    if (!post) return;
+    setPost((current) => (current ? { ...current, is_saved: !current.is_saved } : current));
+    try {
+      const result = await apiClient.post<SavePostResult>(`/posts/${post.id}/save`);
+      setPost((current) => (current ? { ...current, is_saved: result.saved } : current));
+    } catch {
+      setPost((current) => (current ? { ...current, is_saved: !current.is_saved } : current));
+    }
+  }
+
+
   async function submitComment() {
     if (!commentText.trim() || !post) return;
     setIsPosting(true);
@@ -127,8 +139,9 @@ export default function PostDetailScreen() {
 
       <ScrollView contentContainerClassName="pb-4">
         <View className="px-4 pt-4">
-          <PostCard post={post} onPress={() => {}} onEndorse={onEndorsePost} />
+          <PostCard post={post} onPress={() => {}} onEndorse={onEndorsePost} onSave={onSavePost} />
         </View>
+
 
         <View className="mt-5 border-t border-academic-gold/15 px-4 pt-4">
           <Text className="mb-2 text-base font-bold text-academic-ink dark:text-[#EFEAE0]">Comments</Text>

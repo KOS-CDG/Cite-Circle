@@ -37,6 +37,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.citecircle.app.core.designsystem.*
 import com.citecircle.app.feature.circles.CircleDetailScreen
+import com.citecircle.app.feature.circles.DraftDetailScreen
 import com.citecircle.app.feature.circles.CirclesScreen
 import com.citecircle.app.feature.feed.CommentThreadScreen
 import com.citecircle.app.feature.feed.FeedScreen
@@ -61,6 +62,8 @@ import com.citecircle.app.feature.publish.QuickPostScreen
 import com.citecircle.app.feature.search.SearchScreen
 import com.citecircle.app.feature.settings.SettingsScreen
 import com.citecircle.app.feature.library.LibraryScreen
+import com.citecircle.app.feature.pdf.PdfViewerScreen
+
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Main App Navigation Shell
@@ -225,7 +228,15 @@ fun CiteCircleNavHost(
                     onBack = { navController.popBackStack() },
                     onPostClick = { postId -> navController.navigate(CommentThreadRoute(postId)) },
                     onPaperClick = { paperId -> navController.navigate(PaperDetailRoute(paperId)) },
-                    onUserClick = { userId -> navController.navigate(OtherProfileRoute(userId)) }
+                    onUserClick = { userId -> navController.navigate(OtherProfileRoute(userId)) },
+                    onDraftClick = { draftId -> navController.navigate(DraftDetailRoute(draftId)) }
+                )
+            }
+            composable<DraftDetailRoute> { backEntry ->
+                val route = backEntry.toRoute<DraftDetailRoute>()
+                DraftDetailScreen(
+                    draftId = route.draftId,
+                    onBack = { navController.popBackStack() }
                 )
             }
             composable<PaperDetailRoute> { backEntry ->
@@ -233,9 +244,22 @@ fun CiteCircleNavHost(
                 PaperDetailScreen(
                     paperId = route.paperId,
                     onBack = { navController.popBackStack() },
-                    onAuthorClick = { userId -> navController.navigate(OtherProfileRoute(userId)) }
+                    onAuthorClick = { userId -> navController.navigate(OtherProfileRoute(userId)) },
+                    onReadPaperClick = { paperId -> navController.navigate(PdfViewerRoute(paperId)) }
                 )
             }
+            composable<PdfViewerRoute> { backEntry ->
+                val route = backEntry.toRoute<PdfViewerRoute>()
+                PdfViewerScreen(
+                    paperId = route.paperId,
+                    initialPage = route.initialPage,
+                    onBack = { navController.popBackStack() },
+                    onShareQuoteToFeed = { quote, pageNumber, paperId ->
+                        navController.navigate(QuickPostRoute)
+                    }
+                )
+            }
+
             composable<CommentThreadRoute> { backEntry ->
                 val route = backEntry.toRoute<CommentThreadRoute>()
                 CommentThreadScreen(

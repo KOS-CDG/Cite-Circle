@@ -518,24 +518,62 @@ fun Step3AiReview(
                             .verticalScroll(scrollState)
                             .padding(24.dp)
                     ) {
-                        Text(
-                            text = "AI Pre-Review Report",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontFamily = FrauncesFamily,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "AI Pre-Review Report",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontFamily = FrauncesFamily,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            if (report.verdict.isNotBlank()) {
+                                VerdictBadge(verdict = report.verdict, deskRejected = report.deskRejected)
+                            }
+                        }
 
                         Spacer(modifier = Modifier.height(20.dp))
 
-                        // Circular Readiness Gauge Card
-                        ReadinessGaugeCard(score = report.score)
+                        if (report.deskRejected) {
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Filled.Cancel, contentDescription = "Desk Rejection", tint = MaterialTheme.colorScheme.error)
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "Early Desk Rejection",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(
+                                        text = report.summary.ifEmpty { "Manuscript was desk rejected due to non-IMRaD genre or hard gate ethical failure." },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                        } else {
+                            // Circular Readiness Gauge Card
+                            ReadinessGaugeCard(score = report.score, verdict = report.verdict)
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(16.dp))
 
-                        // Section breakdown bars
-                        SectionBreakdownCard(report = report)
+                            // Section breakdown bars
+                            SectionBreakdownCard(report = report)
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
 
                         // Suggestions Title
                         Text(
@@ -616,7 +654,7 @@ fun Step3AiReview(
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     onPublish()
                                 },
-                                enabled = !isPublishing,
+                                enabled = !isPublishing && !report.deskRejected,
                                 isLoading = isPublishing,
                                 modifier = Modifier.weight(1f)
                             )
@@ -673,7 +711,31 @@ fun Step3AiReview(
 }
 
 @Composable
-fun ReadinessGaugeCard(score: Int) {
+fun VerdictBadge(verdict: String, deskRejected: Boolean = false) {
+    val (badgeBg, badgeFg, text) = when {
+        deskRejected || verdict.uppercase() == "REJECT" -> Triple(CcColors.CoralPop.copy(alpha = 0.15f), CcColors.CoralPop, "REJECT")
+        verdict.uppercase() == "MAJOR_REVISIONS" -> Triple(CcColors.HighlighterYellow, CcColors.InkNavy, "MAJOR REVISIONS")
+        verdict.uppercase() == "MINOR_REVISIONS" -> Triple(CcColors.CircleBlue.copy(alpha = 0.15f), CcColors.CircleBlue, "MINOR REVISIONS")
+        else -> Triple(CcColors.SeafoamTeal.copy(alpha = 0.2f), CcColors.SeafoamTeal, "ACCEPT")
+    }
+
+    Surface(
+        color = badgeBg,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.padding(start = 8.dp)
+    ) {
+        Text(
+            text = text,
+            color = badgeFg,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+        )
+    }
+}
+
+@Composable
+fun ReadinessGaugeCard(score: Int, verdict: String = "") {
     var animationProgress by remember { mutableStateOf(0f) }
     LaunchedEffect(score) {
         animate(
@@ -709,7 +771,7 @@ fun ReadinessGaugeCard(score: Int) {
 
                     // Draw score arc
                     drawArc(
-                        color = if (score > 80) CcColors.SeafoamTeal else CcColors.CircleBlue,
+                        color = if (score >= 80) CcColors.SeafoamTeal else if (score >= 60) CcColors.CircleBlue else CcColors.CoralPop,
                         startAngle = -90f,
                         sweepAngle = 3.6f * animationProgress,
                         useCenter = false,
@@ -728,9 +790,18 @@ fun ReadinessGaugeCard(score: Int) {
             Spacer(modifier = Modifier.width(20.dp))
 
             Column {
-                Text(text = "Readiness Score", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(
-                    text = if (score > 80) "Excellent paper structure! Minor tweaks recommended." else "Good start. Add citation context to optimize peer approval.",
+                    text = if (verdict.isNotBlank()) "Readiness: ${verdict.replace("_", " ")}" else "Readiness Score",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = when {
+                        score >= 85 -> "Exemplary paper structure! Minimal revisions needed."
+                        score >= 70 -> "Proficient submission. Minor presentational tweaks recommended."
+                        score >= 50 -> "Developing manuscript. Address methodological revisions before publishing."
+                        else -> "Requires major structural or ethical revisions before review."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.ccColors.marginGray
                 )
@@ -746,13 +817,13 @@ fun SectionBreakdownCard(report: AiReviewReport) {
             Text(text = "Section Breakdown", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(16.dp))
 
-            ScoreProgressRow(label = "Structure", score = report.structure)
+            ScoreProgressRow(label = "Structure (30%)", score = report.structure)
             Spacer(modifier = Modifier.height(12.dp))
-            ScoreProgressRow(label = "Citations", score = report.citations)
+            ScoreProgressRow(label = "Citations (25%)", score = report.citations)
             Spacer(modifier = Modifier.height(12.dp))
-            ScoreProgressRow(label = "Clarity", score = report.clarity)
+            ScoreProgressRow(label = "Clarity (20%)", score = report.clarity)
             Spacer(modifier = Modifier.height(12.dp))
-            ScoreProgressRow(label = "Originality", score = report.originality)
+            ScoreProgressRow(label = "Originality (25%)", score = report.originality)
         }
     }
 }
@@ -800,7 +871,6 @@ fun SuggestionRowItem(suggestion: AiSuggestion) {
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                // Severity dot indicator
                 Box(
                     modifier = Modifier
                         .size(10.dp)
@@ -818,6 +888,21 @@ fun SuggestionRowItem(suggestion: AiSuggestion) {
                     modifier = Modifier.weight(1f)
                 )
 
+                Surface(
+                    color = dotColor.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.padding(end = 8.dp)
+                ) {
+                    Text(
+                        text = suggestion.severity.name.replace("_", " "),
+                        color = if (suggestion.severity == Severity.MODERATE) CcColors.InkNavy else dotColor,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+
                 Checkbox(
                     checked = isAddressed,
                     onCheckedChange = { isAddressed = it }
@@ -833,6 +918,23 @@ fun SuggestionRowItem(suggestion: AiSuggestion) {
                 overflow = TextOverflow.Ellipsis
             )
 
+            if (!suggestion.passageQuote.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "“${suggestion.passageQuote}”",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                        color = MaterialTheme.ccColors.marginGray,
+                        modifier = Modifier.padding(8.dp)
+                    )
+                }
+            }
+
             Text(
                 text = if (expanded) "Show less" else "Show more",
                 color = MaterialTheme.colorScheme.primary,
@@ -840,7 +942,7 @@ fun SuggestionRowItem(suggestion: AiSuggestion) {
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
                     .clickable { expanded = !expanded }
-                    .padding(top = 4.dp)
+                    .padding(top = 6.dp)
             )
         }
     }

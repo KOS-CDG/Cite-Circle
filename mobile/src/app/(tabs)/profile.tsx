@@ -10,7 +10,8 @@ import { Chip } from '@/components/ui/chip';
 import { useAppTheme } from '@/components/ui/theme-provider';
 import { apiClient, ApiError } from '@/lib/api-client';
 import { useAuthStore } from '@/store/auth-store';
-import type { EndorsePostResult, OrcidSyncResult, OrcidSyncState, Post, Publication, User } from '@/types';
+import type { EndorsePostResult, OrcidSyncResult, OrcidSyncState, Post, Publication, SavePostResult, User } from '@/types';
+
 
 type Tab = 'posts' | 'publications';
 
@@ -117,6 +118,22 @@ export default function ProfileScreen() {
     }
   }
 
+  async function onSave(postId: string) {
+    setPosts((current) =>
+      current.map((post) => (post.id === postId ? { ...post, is_saved: !post.is_saved } : post)),
+    );
+    try {
+      const result = await apiClient.post<SavePostResult>(`/posts/${postId}/save`);
+      setPosts((current) =>
+        current.map((post) => (post.id === postId ? { ...post, is_saved: result.saved } : post)),
+      );
+    } catch {
+      setPosts((current) =>
+        current.map((post) => (post.id === postId ? { ...post, is_saved: !post.is_saved } : post)),
+      );
+    }
+  }
+
   function confirmSignOut() {
     Alert.alert('Sign out?', 'You can sign back in anytime.', [
       { text: 'Cancel', style: 'cancel' },
@@ -209,10 +226,17 @@ export default function ProfileScreen() {
               <EmptyState emoji="📄" title="No posts yet" subtitle="Your published posts will show up here." />
             ) : (
               posts.map((post) => (
-                <PostCard key={post.id} post={post} onPress={(id) => router.push(`/post/${id}`)} onEndorse={onEndorse} />
+                <PostCard
+                  key={post.id}
+                  post={post}
+                  onPress={(id) => router.push(`/post/${id}`)}
+                  onEndorse={onEndorse}
+                  onSave={onSave}
+                />
               ))
             )}
           </View>
+
         ) : (
           <View className="px-4 pt-4">
             <OrcidSyncHeader

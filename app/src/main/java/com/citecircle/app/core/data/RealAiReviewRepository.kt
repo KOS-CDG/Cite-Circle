@@ -28,14 +28,23 @@ class RealAiReviewRepository @Inject constructor(
     override fun getReviewProgress(): Flow<AiReviewStage> = _progress.asStateFlow()
 
     override suspend fun reviewPaper(draft: PaperDraft): AiReviewReport {
-        // One round trip covers the whole review, so these stages track the phases of
-        // that single call rather than reporting real server-side progress.
-        _progress.value = AiReviewStage.InProgress("Uploading manuscript draft...", 1, 3)
+        _progress.value = AiReviewStage.InProgress("Parsing manuscript sections & references...", 1, 5)
         return try {
-            _progress.value = AiReviewStage.InProgress("Running peer review analysis...", 2, 3)
-            val report = api.reviewPaper(
-                ReviewRequestDto(title = draft.title, abstract = draft.abstract)
-            ).toDomain()
+            _progress.value = AiReviewStage.InProgress("Evaluating ethical hard gates...", 2, 5)
+            _progress.value = AiReviewStage.InProgress("Analyzing structure & citations via Fireworks.ai...", 3, 5)
+            
+            val dto = api.reviewPaper(
+                ReviewRequestDto(
+                    title = draft.title,
+                    abstract = draft.abstract,
+                    fullText = draft.fullText,
+                    sections = draft.sections.ifEmpty { null }
+                )
+            )
+
+            _progress.value = AiReviewStage.InProgress("Formatting recommendations & verdict...", 4, 5)
+
+            val report = dto.toDomain()
             _progress.value = AiReviewStage.Complete(report)
             report
         } catch (e: Exception) {
@@ -50,6 +59,7 @@ private fun AiSuggestionDto.toDomain() = AiSuggestion(
     section = section,
     text = text,
     severity = runCatching { Severity.valueOf(severity) }.getOrDefault(Severity.MODERATE),
+    passageQuote = passageQuote,
     isAddressed = isAddressed,
 )
 
@@ -59,5 +69,10 @@ private fun AiReviewReportDto.toDomain() = AiReviewReport(
     citations = citations,
     clarity = clarity,
     originality = originality,
+    verdict = verdict,
+    summary = summary,
+    strengths = strengths,
+    weaknesses = weaknesses,
     suggestions = suggestions.map { it.toDomain() },
+    deskRejected = deskRejected
 )

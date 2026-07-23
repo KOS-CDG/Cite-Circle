@@ -19,6 +19,9 @@ object CcColors {
     val HighlighterYellow = Color(0xFFFFC53D) // Signature accent — FAB, citation counts, selection
     val SeafoamTeal   = Color(0xFF2AB3A6)   // Success, verified researcher, AI-approved
     val CoralPop      = Color(0xFFFF6B6B)   // Notifications, likes/endorsements, alerts
+    val EmeraldGreen  = Color(0xFF2E7D32)   // Success green for methodology index
+    val AcademicGold  = Color(0xFFD4AF37)   // Academic accent for graph borders and nodes
+    val DeepBurgundy  = Color(0xFF6B1D2F)   // Deep burgundy for icons and reset buttons
     val PaperCream    = Color(0xFFFAF8F3)   // App background — warm paper
     val MarginGray    = Color(0xFF8A94A6)   // Secondary text, dividers, timestamps
     val CardWhite     = Color(0xFFFFFFFF)   // Card background in light mode
