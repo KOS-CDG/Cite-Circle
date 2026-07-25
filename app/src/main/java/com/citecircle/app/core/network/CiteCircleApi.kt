@@ -654,6 +654,14 @@ interface CiteCircleApi {
     @POST("papers/review")
     suspend fun reviewPaper(@Body body: ReviewRequestDto): AiReviewReportDto
 
+    @Multipart
+    @POST("papers/review-file")
+    suspend fun reviewPaperFile(
+        @Part file: MultipartBody.Part,
+        @Part("title") title: RequestBody? = null,
+        @Part("abstract") abstract: RequestBody? = null
+    ): AiReviewReportDto
+
     // ── Conversations / Messages ──────────────────────────────────────────────
 
     @GET("conversations")

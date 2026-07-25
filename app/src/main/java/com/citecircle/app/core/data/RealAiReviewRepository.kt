@@ -1,5 +1,10 @@
 package com.citecircle.app.core.data
 
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import com.citecircle.app.core.model.AiReviewReport
 import com.citecircle.app.core.model.AiSuggestion
 import com.citecircle.app.core.model.PaperDraft
@@ -21,6 +26,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class RealAiReviewRepository @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val api: CiteCircleApi,
 ) : AiReviewRepository {
 
@@ -28,22 +34,41 @@ class RealAiReviewRepository @Inject constructor(
     override fun getReviewProgress(): Flow<AiReviewStage> = _progress.asStateFlow()
 
     override suspend fun reviewPaper(draft: PaperDraft): AiReviewReport {
-        _progress.value = AiReviewStage.InProgress("Parsing manuscript sections & references...", 1, 5)
+        _progress.value = AiReviewStage.InProgress("Extracting full text & parsing references...", 1, 5)
         return try {
-            _progress.value = AiReviewStage.InProgress("Evaluating ethical hard gates...", 2, 5)
-            _progress.value = AiReviewStage.InProgress("Analyzing structure & citations via Fireworks.ai...", 3, 5)
-            
-            val dto = api.reviewPaper(
-                ReviewRequestDto(
-                    title = draft.title,
-                    abstract = draft.abstract,
-                    fullText = draft.fullText,
-                    sections = draft.sections.ifEmpty { null }
+            val dto = if (draft.pdfUri != null) {
+                _progress.value = AiReviewStage.InProgress("Uploading manuscript document for parsing...", 2, 5)
+                val bytes = context.contentResolver.openInputStream(draft.pdfUri)?.use { it.readBytes() }
+                    ?: throw IllegalArgumentException("Could not read file from Uri ${draft.pdfUri}")
+                
+                val fileName = draft.pdfFileName ?: "manuscript.pdf"
+                val mediaType = if (fileName.endsWith(".docx", ignoreCase = true)) {
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                } else {
+                    "application/pdf"
+                }.toMediaTypeOrNull()
+
+                val requestFile = bytes.toRequestBody(mediaType)
+                val filePart = MultipartBody.Part.createFormData("file", fileName, requestFile)
+                val titleBody = draft.title.takeIf { it.isNotBlank() }?.toRequestBody("text/plain".toMediaTypeOrNull())
+                val abstractBody = draft.abstract.takeIf { it.isNotBlank() }?.toRequestBody("text/plain".toMediaTypeOrNull())
+
+                _progress.value = AiReviewStage.InProgress("Executing IMRaD critique & APA 7 audit...", 3, 5)
+                api.reviewPaperFile(filePart, titleBody, abstractBody)
+            } else {
+                _progress.value = AiReviewStage.InProgress("Evaluating ethical gates & structure...", 2, 5)
+                _progress.value = AiReviewStage.InProgress("Analyzing structure & citations via DeepSeek/Fireworks...", 3, 5)
+                api.reviewPaper(
+                    ReviewRequestDto(
+                        title = draft.title,
+                        abstract = draft.abstract,
+                        fullText = draft.fullText,
+                        sections = draft.sections.ifEmpty { null }
+                    )
                 )
-            )
+            }
 
-            _progress.value = AiReviewStage.InProgress("Formatting recommendations & verdict...", 4, 5)
-
+            _progress.value = AiReviewStage.InProgress("Synthesizing readiness scorecard & report...", 4, 5)
             val report = dto.toDomain()
             _progress.value = AiReviewStage.Complete(report)
             report

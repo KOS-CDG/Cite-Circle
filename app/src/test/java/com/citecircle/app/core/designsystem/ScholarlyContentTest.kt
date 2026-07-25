@@ -1,5 +1,7 @@
 package com.citecircle.app.core.designsystem
 
+import com.citecircle.app.core.designsystem.ScholarlyContent
+import com.citecircle.app.core.designsystem.ContentBlock
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

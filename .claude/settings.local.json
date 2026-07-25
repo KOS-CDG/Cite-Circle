@@ -134,7 +134,38 @@
       "Bash(timeout 90 npx expo start --web --clear)",
       "Bash(echo \"pid $!\")",
       "Bash(awk *)",
-      "Bash(grep -o '`/[a-zA-Z/\\\\[\\\\]$-]*`' /home/dhale/Downloads/Projects/Projects/Research_APP/mobile/.expo/types/router.d.ts)"
+      "Bash(grep -o '`/[a-zA-Z/\\\\[\\\\]$-]*`' /home/dhale/Downloads/Projects/Projects/Research_APP/mobile/.expo/types/router.d.ts)",
+      "Bash(kill %1)",
+      "Bash(archlinux-java status *)",
+      "Bash(update-alternatives --list java)",
+      "Read(//usr/lib/jvm/**)",
+      "Bash(sudo pacman -S --noconfirm jdk21-openjdk)",
+      "Bash(pacman -Qs jdk)",
+      "Bash(pacman -Qs jdk21)",
+      "Bash(find / -maxdepth 4 -iname \"*jdk-21*\" -o -iname \"*java-21*\")",
+      "Bash(pacman -Ss jdk21-openjdk)",
+      "Bash(pacman -Ss \"^jdk\")",
+      "Bash(JAVA_HOME=/usr/lib/jvm/java-21-openjdk npx expo run:android)",
+      "Bash(adb kill-server *)",
+      "Bash(adb start-server *)",
+      "Bash(ip addr *)",
+      "Bash(adb reverse *)",
+      "Bash(tee /home/dhale/.claude/jobs/d4874d62/tmp/metro.log)",
+      "Bash(fuser -k 8081/tcp)",
+      "Bash(kill -9 22571)",
+      "Bash(claude --version)",
+      "Bash(npm -g config get prefix)",
+      "Bash(ls -la \"$\\(npm -g config get prefix \\)/lib/node_modules/@anthropic-ai/claude-code\")",
+      "Bash(xargs -I{} stat -c '%Y %n' {})",
+      "Bash(xargs -a /tmp/claude-1000/-home-dhale-Downloads-Projects-Projects-Research-APP-mobile/6a2df7e5-c108-42dd-b4bf-7db9ac138f45/scratchpad/recent_transcripts.txt -d '\\\\n' rg -o '\"name\":\"mcp__[a-zA-Z0-9_]+\"' --no-filename)",
+      "Bash(xargs -a /tmp/claude-1000/-home-dhale-Downloads-Projects-Projects-Research-APP-mobile/6a2df7e5-c108-42dd-b4bf-7db9ac138f45/scratchpad/recent_transcripts.txt -d '\\\\n' rg -o '\"skill\":\"[a-zA-Z0-9_:.-]+\"' --no-filename)",
+      "Bash(xargs -a /tmp/claude-1000/-home-dhale-Downloads-Projects-Projects-Research-APP-mobile/6a2df7e5-c108-42dd-b4bf-7db9ac138f45/scratchpad/recent_transcripts.txt -d '\\\\n' rg -o '\"type\":\"attachment\",\"attachment\":\\\\{\"type\":\"hook_[a-z_]+\",\"hookName\":\"[^\"]*\",\"hookEvent\":\"[^\"]*\"' --no-filename)",
+      "Bash(SCRATCH=/tmp/claude-1000/-home-dhale-Downloads-Projects-Projects-Research-APP-mobile/6a2df7e5-c108-42dd-b4bf-7db9ac138f45/scratchpad\nxargs -a \"$SCRATCH/recent_transcripts.txt\" -d '\\\\n' rg -l '\"toolDenialKind\"' 2>/dev/null)",
+      "Bash(xargs -a /tmp/claude-1000/-home-dhale-Downloads-Projects-Projects-Research-APP-mobile/6a2df7e5-c108-42dd-b4bf-7db9ac138f45/scratchpad/recent_transcripts.txt -d '\\\\n' rg -o '\"name\":\"mcp__[a-zA-Z0-9_-]+\"' --no-filename)",
+      "Bash(date -d @$\\(\\(1784947135661/1000\\)\\))",
+      "Bash(xargs -a __TRACKED_VAR__/recent_transcripts.txt -d '\\\\n' rg -o '<command-name>[^<]*vercel[^<]*</command-name>' --no-filename -i)",
+      "Bash(npm *)",
+      "Bash(claude update *)"
     ]
   },
   "enableAllProjectMcpServers": true,
@@ -144,5 +175,10 @@
     "render",
     "cloudinary-asset-management",
     "mongodb"
+  ],
+  "disabledMcpjsonServers": [
+    "cloudinary-asset-management",
+    "github",
+    "neon"
   ]
 }
