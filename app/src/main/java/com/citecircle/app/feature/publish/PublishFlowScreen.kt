@@ -191,8 +191,15 @@ fun PublishFlowScreen(
                             viewModel.updateDraft { updated }
                             viewModel.setStep(3)
                             viewModel.runAiReview {}
+                        },
+                        onQuickPublish = { updated ->
+                            viewModel.updateDraft { updated }
+                            viewModel.publishPaper {
+                                viewModel.setStep(4)
+                            }
                         }
                     )
+
                     3 -> Step3AiReview(
                         progress = progress,
                         report = report,
@@ -318,8 +325,10 @@ fun Step2Details(
     draft: PaperDraft,
     onDraftChange: (PaperDraft) -> Unit,
     onBack: () -> Unit,
-    onContinue: (PaperDraft) -> Unit
+    onContinue: (PaperDraft) -> Unit,
+    onQuickPublish: (PaperDraft) -> Unit = {}
 ) {
+
     var title by remember { mutableStateOf(draft.title) }
     var abstract by remember { mutableStateOf(draft.abstract) }
     var pdfName by remember { mutableStateOf(draft.pdfFileName) }
@@ -453,20 +462,34 @@ fun Step2Details(
         Spacer(modifier = Modifier.weight(1f))
         Spacer(modifier = Modifier.height(32.dp))
 
-        Row(
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            CcSecondaryButton(text = "Back", onClick = onBack, modifier = Modifier.weight(1f).padding(end = 12.dp))
             CcPrimaryButton(
-                text = "Continue",
+                text = "Publish Immediately ⚡",
                 onClick = {
                     val updated = draft.copy(title = title, abstract = abstract, pdfFileName = pdfName)
-                    onContinue(updated)
+                    onQuickPublish(updated)
                 },
                 enabled = title.isNotBlank() && abstract.isNotBlank() && pdfName != null,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.fillMaxWidth()
             )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                CcSecondaryButton(text = "Back", onClick = onBack, modifier = Modifier.weight(1f).padding(end = 6.dp))
+                CcSecondaryButton(
+                    text = "Run AI Review Scan",
+                    onClick = {
+                        val updated = draft.copy(title = title, abstract = abstract, pdfFileName = pdfName)
+                        onContinue(updated)
+                    },
+                    enabled = title.isNotBlank() && abstract.isNotBlank() && pdfName != null,
+                    modifier = Modifier.weight(1.3f).padding(start = 6.dp)
+                )
+            }
         }
     }
 }
@@ -492,7 +515,9 @@ fun Step3AiReview(
         when (progress) {
             is AiReviewStage.InProgress -> {
                 Column(
-                    modifier = Modifier.align(Alignment.Center),
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(horizontal = 32.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     AiPencilProgress()
@@ -508,8 +533,16 @@ fun Step3AiReview(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.ccColors.marginGray
                     )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    CcPrimaryButton(
+                        text = "Skip Scan & Publish Now ⚡",
+                        onClick = onPublish,
+                        isLoading = isPublishing,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
+
             is AiReviewStage.Complete -> {
                 if (report != null) {
                     Column(
