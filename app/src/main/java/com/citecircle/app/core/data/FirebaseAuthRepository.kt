@@ -52,12 +52,21 @@ class FirebaseAuthRepository @Inject constructor(
     }
 
     override fun isLoggedIn(): Boolean {
-        return firebaseAuth.currentUser != null || runBlocking { tokenManager.isLoggedIn() }
+        val firebaseUser = firebaseAuth.currentUser
+        if (firebaseUser == null) {
+            // Clear orphan DataStore tokens if Firebase user is signed out
+            runBlocking { tokenManager.clearTokens() }
+            return false
+        }
+        return true
     }
 
     override suspend fun login(email: String, password: String): Boolean {
-        // Explicit demo bypass ONLY for hardcoded demo buttons
-        if ((email == "admin@citecircle.com" || email == "dummy@citecircle.com" || email == "orcid@orcid.org" || email == "google@gmail.com") && password == "password") {
+        // Clear any old leftover session tokens first
+        tokenManager.clearTokens()
+
+        // Explicit demo bypass ONLY for hardcoded demo buttons with password "password"
+        if ((email == "admin@citecircle.com" || email == "dummy@citecircle.com") && password == "password") {
             val nameFromEmail = email.substringBefore("@").replaceFirstChar { it.uppercase() }
             val demoUser = User(
                 id = if (email.startsWith("admin")) "u_admin" else "u_${System.currentTimeMillis()}",
@@ -115,11 +124,14 @@ class FirebaseAuthRepository @Inject constructor(
         } catch (e: Exception) {
             e.printStackTrace()
             // Strictly fail authentication on invalid password or missing account
+            tokenManager.clearTokens()
             false
         }
     }
 
     override suspend fun signup(email: String, password: String, role: UserRole): Boolean {
+        tokenManager.clearTokens()
+
         val nameFromEmail = email.substringBefore("@")
             .split(".")
             .joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
@@ -160,40 +172,18 @@ class FirebaseAuthRepository @Inject constructor(
         } catch (e: Exception) {
             e.printStackTrace()
             // Strictly fail signup on invalid credentials or error
+            tokenManager.clearTokens()
             false
         }
     }
 
-
     override suspend fun logout() {
         runCatching { firebaseAuth.signOut() }
-        val currentUserId = tokenManager.getCurrentUserId()
-        val accounts = _savedAccounts.value
-        val remaining = accounts.filter { it.userId != currentUserId }
-
-        if (remaining.isNotEmpty()) {
-            val nextActive = remaining.first()
-            tokenManager.saveTokens(nextActive.accessToken, nextActive.refreshToken, nextActive.userId)
-            tokenManager.saveUserEmail(nextActive.email)
-
-            val updated = remaining.map { acc ->
-                acc.copy(isActive = (acc.userId == nextActive.userId))
-            }
-            persistAccounts(updated)
-
-            val switchedUser = User(
-                id = nextActive.userId,
-                name = nextActive.name,
-                avatarUrl = nextActive.avatarUrl,
-                role = runCatching { UserRole.valueOf(nextActive.role) }.getOrDefault(UserRole.STUDENT),
-                institution = "CiteCircle Network"
-            )
-            userRepository.updateCurrentUser(switchedUser)
-        } else {
-            persistAccounts(emptyList())
-            tokenManager.clearTokens()
-        }
+        persistAccounts(emptyList())
+        tokenManager.clearAll()
+        userRepository.updateCurrentUser(User(id = "", name = "Guest Scholar", role = UserRole.STUDENT))
     }
+
 
     override suspend fun changePassword(oldPassword: String, newPassword: String): Result<Unit> {
         val user = firebaseAuth.currentUser
