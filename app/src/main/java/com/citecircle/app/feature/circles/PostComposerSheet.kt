@@ -113,7 +113,8 @@ fun PostComposerSheet(
 
             val lowerName = displayName.lowercase()
             val invalidExtensions = listOf(".zip", ".rar", ".7z", ".tar", ".gz", ".tgz", ".zipx")
-            if (invalidExtensions.any { lowerName.endswith(it) }) {
+            if (invalidExtensions.any { lowerName.endsWith(it) }) {
+
                 errorMessage = "ZIP and archive files are invalid for posting. Please upload PDF or image files."
                 android.widget.Toast.makeText(context, errorMessage, android.widget.Toast.LENGTH_LONG).show()
                 return@rememberLauncherForActivityResult
