@@ -34,19 +34,24 @@ export default function CitationGraphScreen() {
   const [selectedPaperNode, setSelectedPaperNode] = useState<CitationGraphNode | null>(null);
   const [selectedAuthorNode, setSelectedAuthorNode] = useState<CoauthorGraphNode | null>(null);
 
-  const targetPaperId = paper_id || 'pap_01';
-  const targetUserId = user_id || 'usr_thorne';
-
   const loadData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
       if (mode === 'citations') {
+        if (!paper_id) {
+          setError('No research paper selected for citation analysis.');
+          return;
+        }
         const query = `?depth=${depth}&min_citations=${minCitations}`;
-        const res = await apiClient.get<CitationGraphResponse>(`/papers/${targetPaperId}/citation-graph${query}`);
+        const res = await apiClient.get<CitationGraphResponse>(`/papers/${paper_id}/citation-graph${query}`);
         setCitationData(res);
       } else {
-        const res = await apiClient.get<CoauthorGraphResponse>(`/users/${targetUserId}/coauthor-graph`);
+        if (!user_id) {
+          setError('No user selected for co-author network analysis.');
+          return;
+        }
+        const res = await apiClient.get<CoauthorGraphResponse>(`/users/${user_id}/coauthor-graph`);
         setCoauthorData(res);
       }
     } catch (err: any) {
@@ -54,7 +59,7 @@ export default function CitationGraphScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, [mode, depth, minCitations, targetPaperId, targetUserId]);
+  }, [mode, depth, minCitations, paper_id, user_id]);
 
   useEffect(() => {
     loadData();

@@ -1013,8 +1013,7 @@ class RealPaperRepository @Inject constructor(
             val allPapers = api.getPapers(limit = 200).map { it.toDomain() }.distinctBy { it.id }
             emit(allPapers.filter { savedIds.contains(it.id) })
         } catch (e: Exception) {
-            // Fallback: return fake papers that match saved IDs (offline mode)
-            emit(FakeDataSource.papers.filter { savedIds.contains(it.id) }.distinctBy { it.id })
+            emit(emptyList())
         }
     }
 
@@ -1181,7 +1180,7 @@ class RealCircleRepository @Inject constructor(
         try {
             val circles = api.getCircles().map { it.toDomain() }
             emit(circles.map { it.copy(isJoined = _joinedIds.value.contains(it.id)) })
-        } catch (e: Exception) { emit(FakeDataSource.circles) }
+        } catch (e: Exception) { emit(emptyList()) }
     }
 
     override fun getJoinedCircles(): Flow<List<Circle>> = flow {
@@ -1219,7 +1218,7 @@ class RealCircleRepository @Inject constructor(
         val ws = try {
             api.getCircleWorkspace(circleId).toDomain()
         } catch (e: Exception) {
-            FakeDataSource.sampleWorkspace.copy(circleId = circleId)
+            CircleWorkspace(id = "ws_$circleId", circleId = circleId, pinBoardText = "")
         }
         emit(ws)
     }
@@ -1235,7 +1234,7 @@ class RealCircleRepository @Inject constructor(
         val members = try {
             api.getCircleMembers(circleId).map { it.toDomain() }
         } catch (e: Exception) {
-            FakeDataSource.sampleMembers
+            emptyList()
         }
         emit(members)
     }
@@ -1260,7 +1259,7 @@ class RealCircleRepository @Inject constructor(
         val drafts = try {
             api.getCircleDrafts(circleId).map { it.toDomain() }
         } catch (e: Exception) {
-            FakeDataSource.sampleDrafts
+            emptyList()
         }
         emit(drafts)
     }
@@ -1269,7 +1268,7 @@ class RealCircleRepository @Inject constructor(
         val draft = try {
             api.getDraft(draftId).toDomain()
         } catch (e: Exception) {
-            FakeDataSource.sampleDrafts.find { it.id == draftId }
+            null
         }
         emit(draft)
     }
@@ -1301,7 +1300,7 @@ class RealCircleRepository @Inject constructor(
         val reqs = try {
             api.getDraftReviewRequests(draftId).map { it.toDomain() }
         } catch (e: Exception) {
-            FakeDataSource.sampleReviewRequests
+            emptyList()
         }
         emit(reqs)
     }
@@ -1333,7 +1332,7 @@ class RealCircleRepository @Inject constructor(
         val cmts = try {
             api.getDraftComments(draftId).map { it.toDomain() }
         } catch (e: Exception) {
-            FakeDataSource.sampleDraftComments
+            emptyList()
         }
         emit(cmts)
     }
@@ -1372,7 +1371,7 @@ class RealCircleRepository @Inject constructor(
         val lists = try {
             api.getCircleReadingLists(circleId).map { it.toDomain() }
         } catch (e: Exception) {
-            FakeDataSource.sampleReadingLists
+            emptyList()
         }
         emit(lists)
     }
@@ -1509,8 +1508,8 @@ class RealMessageRepository @Inject constructor(
             // Always prepend the AI conversation at the top
             emit(listOf(aiConv) + realConversations)
         } catch (e: Exception) {
-            // Prepend AI conv to fake data as well
-            emit(listOf(aiConv) + FakeDataSource.conversations.filter { it.id != "conv_ai" })
+            // Prepend AI conv only
+            emit(listOf(aiConv))
         }
     }
 
@@ -1660,7 +1659,7 @@ class RealNotificationRepository @Inject constructor(
     override fun getNotifications(): Flow<List<Notification>> = flow {
         try {
             emit(api.getNotifications().map { it.toDomain(resolveActor(it.actorId)) })
-        } catch (e: Exception) { emit(FakeDataSource.notifications) }
+        } catch (e: Exception) { emit(emptyList()) }
     }
 
     override suspend fun markAsRead(notifId: String) {
@@ -1679,9 +1678,7 @@ class RealNotificationRepository @Inject constructor(
 class RealSearchRepository @Inject constructor(
     private val api: CiteCircleApi,
 ) : SearchRepository {
-    private val _recentSearches = MutableStateFlow<List<String>>(
-        listOf("causal inference LLMs", "genomics population", "quantum error correction")
-    )
+    private val _recentSearches = MutableStateFlow<List<String>>(emptyList())
 
     override suspend fun search(query: String): SearchResults {
         if (query.isBlank()) return SearchResults()

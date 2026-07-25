@@ -144,7 +144,17 @@ class FireworksAiReviewRepository @Inject constructor(
         } catch (e: Exception) {
             val errorMessage = e.localizedMessage ?: "An unexpected error occurred during AI review"
             _progress.value = AiReviewStage.Error(errorMessage)
-            return FakeDataSource.sampleAiReport
+            return AiReviewReport(
+                score = 0,
+                structure = 0,
+                citations = 0,
+                clarity = 0,
+                originality = 0,
+                verdict = "ERROR",
+                summary = "AI review could not be completed: $errorMessage",
+                suggestions = emptyList(),
+                deskRejected = true
+            )
         }
     }
 }

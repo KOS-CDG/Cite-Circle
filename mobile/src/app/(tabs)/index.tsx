@@ -24,42 +24,7 @@ function matchesCategory(post: Post, category: Category): boolean {
   return post.flair === ('PAPER_FEEDBACK' satisfies PostFlair);
 }
 
-const MOCK_FEED_POSTS: Post[] = [
-  {
-    id: 'post_1',
-    author_id: 'user_1',
-    content:
-      'Our latest paper explores dynamic test-time compute allocation. By allowing LLMs to execute step-by-step verification trees during inference, accuracy on MATH-500 improves by +18.4%. What are your thoughts on compute scaling vs architecture search?',
-    type: 'PAPER_SHARE',
-    timestamp: Date.now() - 7200000,
-    endorse_count: 128,
-    comment_count: 34,
-    circle_id: null,
-    attached_paper_id: 'paper_deepseek',
-    milestone_text: null,
-    flair: 'RESOURCE',
-    image_url: null,
-    is_endorsed: true,
-    is_saved: false,
-  },
-  {
-    id: 'post_2',
-    author_id: 'user_2',
-    content:
-      'While AlphaFold 3 achieves remarkable accuracy on ligand binding complexes, flexible loop regions and dynamic conformational shifts still pose challenges. Here is our analysis comparing predicted vs experimental B-factors.',
-    type: 'DISCUSSION',
-    timestamp: Date.now() - 18000000,
-    endorse_count: 245,
-    comment_count: 52,
-    circle_id: null,
-    attached_paper_id: null,
-    milestone_text: null,
-    flair: 'DISCUSSION',
-    image_url: null,
-    is_endorsed: false,
-    is_saved: false,
-  },
-];
+const MOCK_FEED_POSTS: Post[] = [];
 
 export default function FeedScreen() {
   const { colors } = useAppTheme();
@@ -82,10 +47,10 @@ export default function FeedScreen() {
     setError(null);
     try {
       const page = await loadPage(0);
-      setPosts(page.length > 0 ? page : MOCK_FEED_POSTS);
+      setPosts(page);
       setHasMore(page.length === PAGE_SIZE);
     } catch {
-      setPosts(MOCK_FEED_POSTS);
+      setPosts([]);
       setHasMore(false);
     }
   }, [loadPage]);

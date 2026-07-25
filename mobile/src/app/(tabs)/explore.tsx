@@ -8,83 +8,8 @@ import { useAppTheme } from '@/components/ui/theme-provider';
 import { apiClient } from '@/lib/api-client';
 import type { Circle, Paper } from '@/types';
 
-const MOCK_CIRCLES: Circle[] = [
-  {
-    id: 'circle_ai',
-    name: 'Generative AI & LLMs',
-    description: 'Exploring neural architectures, reasoning, and alignment in modern deep learning models.',
-    icon_emoji: '🤖',
-    banner_color: 4281358937,
-    member_count: 1420,
-    category: 'Artificial Intelligence',
-    post_count: 84,
-    is_joined: true,
-  },
-  {
-    id: 'circle_bio',
-    name: 'Computational Biology',
-    description: 'Protein structure prediction, genomic sequencing, and bio-ML applications.',
-    icon_emoji: '🧬',
-    banner_color: 4283141200,
-    member_count: 890,
-    category: 'Biology & Biotech',
-    post_count: 45,
-    is_joined: false,
-  },
-  {
-    id: 'circle_quantum',
-    name: 'Quantum Optics & Computing',
-    description: 'Quantum error correction, superconducting qubits, and photonic quantum information.',
-    icon_emoji: '⚛️',
-    banner_color: 4280145200,
-    member_count: 615,
-    category: 'Physics',
-    post_count: 32,
-    is_joined: false,
-  },
-];
-
-const MOCK_PAPERS: Paper[] = [
-  {
-    id: 'paper_deepseek',
-    title: 'DeepSeek-V3 Technical Report: Architecture and Training Dynamics',
-    abstract: 'We introduce DeepSeek-V3, a Multi-head Latent Attention (MLA) transformer trained on 14.8T tokens with Mixture-of-Experts.',
-    year: 2024,
-    journal: 'arXiv preprint',
-    doi: '10.48550/arXiv.2412.19437',
-    citation_count: 482,
-    pdf_url: 'https://arxiv.org/pdf/2412.19437.pdf',
-    circle_id: 'circle_ai',
-    is_published: true,
-    ai_score: 96,
-  },
-  {
-    id: 'paper_alphafold',
-    title: 'Accurate Structure Prediction of Biomolecular Complexes with AlphaFold 3',
-    abstract: 'AlphaFold 3 expands protein structure prediction to complex biological interactions including proteins, nucleic acids, and small molecules.',
-    year: 2024,
-    journal: 'Nature',
-    doi: '10.1038/s41586-024-07487-w',
-    citation_count: 1250,
-    pdf_url: null,
-    circle_id: 'circle_bio',
-    is_published: true,
-    ai_score: 99,
-  },
-  {
-    id: 'paper_flash',
-    title: 'FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning',
-    abstract: 'We present FlashAttention-2, optimizing work partitioning across GPU thread blocks to achieve 2x speedup over standard attention.',
-    year: 2023,
-    journal: 'NeurIPS',
-    doi: '10.48550/arXiv.2307.08691',
-    citation_count: 2140,
-    pdf_url: null,
-    circle_id: 'circle_ai',
-    is_published: true,
-    ai_score: 94,
-  },
-];
+const MOCK_CIRCLES: Circle[] = [];
+const MOCK_PAPERS: Paper[] = [];
 
 const FIELDS = ['All', 'AI & ML', 'CompBio', 'Quantum', 'Neuroscience', 'NLP'];
 
@@ -102,11 +27,11 @@ export default function ExploreScreen() {
     try {
       const fetchedCircles = await apiClient.get<Circle[]>('/circles?limit=10');
       const fetchedPapers = await apiClient.get<Paper[]>('/papers?limit=10');
-      setCircles(fetchedCircles.length > 0 ? fetchedCircles : MOCK_CIRCLES);
-      setPapers(fetchedPapers.length > 0 ? fetchedPapers : MOCK_PAPERS);
+      setCircles(fetchedCircles);
+      setPapers(fetchedPapers);
     } catch {
-      setCircles(MOCK_CIRCLES);
-      setPapers(MOCK_PAPERS);
+      setCircles([]);
+      setPapers([]);
     }
   }, []);
 
@@ -206,30 +131,34 @@ export default function ExploreScreen() {
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-4 px-4 py-1">
             <View className="flex-row gap-3 pr-6">
-              {circles.map((circle) => (
-                <Pressable
-                  key={circle.id}
-                  onPress={() => router.push(`/circle/${circle.id}`)}
-                  className="w-64 rounded-2xl border border-academic-gold/20 bg-white p-4 shadow-sm dark:border-[#33333D] dark:bg-[#1F1F26]"
-                >
-                  <Text className="font-serif text-base font-bold text-academic-ink dark:text-[#EFEAE0]" numberOfLines={1}>
-                    {circle.name}
-                  </Text>
-                  <Text className="mt-1 text-xs text-academic-muted dark:text-[#A6A6AC]" numberOfLines={2}>
-                    {circle.description}
-                  </Text>
-
-                  <View className="mt-3 flex-row items-center justify-between border-t border-academic-gold/10 pt-2.5 dark:border-[#2A2A33]">
-                    <Text className="text-xs font-semibold text-academic-navy dark:text-[#5D82AE]">
-                      {circle.member_count} scholars
+              {circles.length === 0 ? (
+                <Text className="py-2 text-xs text-academic-muted dark:text-[#A6A6AC]">No circles available yet.</Text>
+              ) : (
+                circles.map((circle) => (
+                  <Pressable
+                    key={circle.id}
+                    onPress={() => router.push(`/circle/${circle.id}`)}
+                    className="w-64 rounded-2xl border border-academic-gold/20 bg-white p-4 shadow-sm dark:border-[#33333D] dark:bg-[#1F1F26]"
+                  >
+                    <Text className="font-serif text-base font-bold text-academic-ink dark:text-[#EFEAE0]" numberOfLines={1}>
+                      {circle.name}
                     </Text>
-                    <View className="flex-row items-center gap-1 rounded-full bg-academic-gold/15 px-2.5 py-1">
-                      <Text className="text-xs font-bold text-academic-navy dark:text-[#5D82AE]">View</Text>
-                      <ArrowUpRight size={12} color={colors.accentSecondary} />
+                    <Text className="mt-1 text-xs text-academic-muted dark:text-[#A6A6AC]" numberOfLines={2}>
+                      {circle.description}
+                    </Text>
+
+                    <View className="mt-3 flex-row items-center justify-between border-t border-academic-gold/10 pt-2.5 dark:border-[#2A2A33]">
+                      <Text className="text-xs font-semibold text-academic-navy dark:text-[#5D82AE]">
+                        {circle.member_count} scholars
+                      </Text>
+                      <View className="flex-row items-center gap-1 rounded-full bg-academic-gold/15 px-2.5 py-1">
+                        <Text className="text-xs font-bold text-academic-navy dark:text-[#5D82AE]">View</Text>
+                        <ArrowUpRight size={12} color={colors.accentSecondary} />
+                      </View>
                     </View>
-                  </View>
-                </Pressable>
-              ))}
+                  </Pressable>
+                ))
+              )}
             </View>
           </ScrollView>
         </View>
@@ -242,39 +171,45 @@ export default function ExploreScreen() {
           </View>
 
           <View className="gap-3">
-            {filteredPapers.map((paper) => (
-              <Pressable
-                key={paper.id}
-                onPress={() => router.push(`/paper/${paper.id}`)}
-                className="rounded-2xl border border-academic-gold/20 bg-white p-4 shadow-sm dark:border-[#33333D] dark:bg-[#1F1F26]"
-              >
-                <View className="flex-row items-center justify-between">
-                  <View className="flex-row items-center gap-1.5 rounded-full bg-academic-navy/10 px-2.5 py-0.5 dark:bg-[#5D82AE]/15">
-                    <BookOpen size={12} color={colors.accentSecondary} />
-                    <Text className="text-xs font-bold text-academic-navy dark:text-[#5D82AE]">{paper.journal}</Text>
+            {filteredPapers.length === 0 ? (
+              <View className="items-center py-10">
+                <Text className="text-xs text-academic-muted dark:text-[#A6A6AC]">No research papers found.</Text>
+              </View>
+            ) : (
+              filteredPapers.map((paper) => (
+                <Pressable
+                  key={paper.id}
+                  onPress={() => router.push(`/paper/${paper.id}`)}
+                  className="rounded-2xl border border-academic-gold/20 bg-white p-4 shadow-sm dark:border-[#33333D] dark:bg-[#1F1F26]"
+                >
+                  <View className="flex-row items-center justify-between">
+                    <View className="flex-row items-center gap-1.5 rounded-full bg-academic-navy/10 px-2.5 py-0.5 dark:bg-[#5D82AE]/15">
+                      <BookOpen size={12} color={colors.accentSecondary} />
+                      <Text className="text-xs font-bold text-academic-navy dark:text-[#5D82AE]">{paper.journal}</Text>
+                    </View>
+                    <Text className="text-xs text-academic-muted dark:text-[#A6A6AC]">{paper.year}</Text>
                   </View>
-                  <Text className="text-xs text-academic-muted dark:text-[#A6A6AC]">{paper.year}</Text>
-                </View>
 
-                <Text className="mt-2 text-base font-bold text-academic-ink dark:text-[#EFEAE0]">{paper.title}</Text>
-                <Text className="mt-1 font-mono text-xs text-academic-muted dark:text-[#A6A6AC]" numberOfLines={1}>
-                  DOI: {paper.doi}
-                </Text>
-                <Text className="mt-2 text-xs leading-relaxed text-academic-muted dark:text-[#A6A6AC]" numberOfLines={2}>
-                  {paper.abstract}
-                </Text>
-
-                <View className="mt-3 flex-row items-center justify-between border-t border-academic-gold/10 pt-2 dark:border-[#2A2A33]">
-                  <Text className="text-xs font-semibold text-academic-maroon dark:text-[#C6635E]">
-                    {paper.citation_count} citations
+                  <Text className="mt-2 text-base font-bold text-academic-ink dark:text-[#EFEAE0]">{paper.title}</Text>
+                  <Text className="mt-1 font-mono text-xs text-academic-muted dark:text-[#A6A6AC]" numberOfLines={1}>
+                    DOI: {paper.doi}
                   </Text>
-                  <View className="flex-row items-center gap-1">
-                    <Text className="text-xs font-bold text-academic-navy dark:text-[#5D82AE]">Read Paper</Text>
-                    <ArrowUpRight size={14} color={colors.accentSecondary} />
+                  <Text className="mt-2 text-xs leading-relaxed text-academic-muted dark:text-[#A6A6AC]" numberOfLines={2}>
+                    {paper.abstract}
+                  </Text>
+
+                  <View className="mt-3 flex-row items-center justify-between border-t border-academic-gold/10 pt-2 dark:border-[#2A2A33]">
+                    <Text className="text-xs font-semibold text-academic-maroon dark:text-[#C6635E]">
+                      {paper.citation_count} citations
+                    </Text>
+                    <View className="flex-row items-center gap-1">
+                      <Text className="text-xs font-bold text-academic-navy dark:text-[#5D82AE]">Read Paper</Text>
+                      <ArrowUpRight size={14} color={colors.accentSecondary} />
+                    </View>
                   </View>
-                </View>
-              </Pressable>
-            ))}
+                </Pressable>
+              ))
+            )}
           </View>
         </View>
       </ScrollView>

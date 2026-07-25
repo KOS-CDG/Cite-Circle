@@ -15,29 +15,29 @@ import type { EndorsePostResult, OrcidSyncResult, OrcidSyncState, Post, Publicat
 
 type Tab = 'posts' | 'publications';
 
-const MOCK_SCHOLAR_USER: User = {
-  id: 'me',
-  name: 'Dr. Alexander Wright',
+const GUEST_USER: User = {
+  id: 'guest',
+  name: 'Scholar Profile',
   avatar_url: '',
-  role: 'RESEARCHER',
-  institution: 'Stanford AI Institute',
-  field_of_study: 'Artificial Intelligence & Multi-Agent Systems',
-  bio: 'Focusing on LLM reasoning, neural-symbolic integration, and autonomous scientific discovery systems.',
-  orcid_id: '0000-0003-4912-8800',
-  follower_count: 1850,
-  following_count: 340,
-  citation_count: 4230,
-  external_citation_count: 3800,
-  publication_count: 18,
-  orcid_verified: true,
-  is_verified: true,
-  interests: ['Multi-Agent AI', 'Neural Reasoning', 'Automated Science'],
+  role: 'STUDENT',
+  institution: '',
+  field_of_study: '',
+  bio: '',
+  orcid_id: '',
+  follower_count: 0,
+  following_count: 0,
+  citation_count: 0,
+  external_citation_count: 0,
+  publication_count: 0,
+  orcid_verified: false,
+  is_verified: false,
+  interests: [],
 };
 
 export default function ProfileScreen() {
   const { colors } = useAppTheme();
   const authUser = useAuthStore((state) => state.user);
-  const user = authUser || MOCK_SCHOLAR_USER;
+  const user = authUser || GUEST_USER;
   const setUser = useAuthStore((state) => state.setUser);
   const signOut = useAuthStore((state) => state.signOut);
 

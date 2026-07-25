@@ -671,21 +671,13 @@ fun RequestReviewDialog(
 
 // Helper methods for generating realistic draft manuscript text
 private fun getSampleSectionParagraph1(sectionName: String, draft: CircleDraft): String {
-    return when {
-        sectionName.contains("Abstract", ignoreCase = true) -> draft.abstract.ifBlank {
-            "As generative AI and collaborative writing platforms become deeply integrated into scientific research workflows, questions arise concerning cognitive load, trust calibration, and epistemic distribution between human authors and intelligent assistants."
-        }
-        sectionName.contains("Introduction", ignoreCase = true) ->
-            "Recent advancements in distributed research environments have transformed how academic lab groups iterate on preprints and working drafts. While traditional manuscript workflows rely on asynchronous PDF email attachments, real-time section commenting and co-author peer review lower friction and improve publication quality."
-        sectionName.contains("Methodology", ignoreCase = true) ->
-            "We conducted a mixed-methods empirical evaluation across 12 university research labs over a 6-month period. Participants were assigned to write, review, and annotate working manuscripts using our collaborative research workspace."
-        sectionName.contains("Evaluation", ignoreCase = true) ->
-            "Empirical results demonstrated a 34% reduction in manuscript revision cycle times and a statistically significant increase in peer reviewer satisfaction scores (p < 0.001)."
-        else ->
-            "This section analyzes the key implications of collaborative draft authoring for scientific communities, highlighting best practices for open peer review and continuous feedback loops."
+    return if (sectionName.contains("Abstract", ignoreCase = true) && draft.abstract.isNotBlank()) {
+        draft.abstract
+    } else {
+        "No text has been added to $sectionName yet. Edit the manuscript draft to write this section."
     }
 }
 
 private fun getSampleSectionParagraph2(sectionName: String): String {
-    return "Furthermore, inline section comments anchored directly to paragraph offsets enable lead authors to address specific methodological critiques without losing contextual clarity during pre-submission review iterations."
+    return ""
 }
