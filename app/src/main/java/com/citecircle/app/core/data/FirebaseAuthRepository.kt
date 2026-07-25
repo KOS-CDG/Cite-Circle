@@ -56,9 +56,25 @@ class FirebaseAuthRepository @Inject constructor(
     }
 
     override suspend fun login(email: String, password: String): Boolean {
+        // Explicit demo bypass ONLY for hardcoded demo buttons
+        if ((email == "admin@citecircle.com" || email == "dummy@citecircle.com" || email == "orcid@orcid.org" || email == "google@gmail.com") && password == "password") {
+            val nameFromEmail = email.substringBefore("@").replaceFirstChar { it.uppercase() }
+            val demoUser = User(
+                id = if (email.startsWith("admin")) "u_admin" else "u_${System.currentTimeMillis()}",
+                name = nameFromEmail,
+                role = UserRole.STUDENT,
+                institution = "CiteCircle Network"
+            )
+            tokenManager.saveTokens("demo_access_token", "demo_refresh_token", demoUser.id)
+            tokenManager.saveUserEmail(email)
+            userRepository.updateCurrentUser(demoUser)
+            addSavedAccountSession(demoUser, email, "demo_access_token", "demo_refresh_token")
+            return true
+        }
+
         return try {
             val authResult = firebaseAuth.signInWithEmailAndPassword(email, password).await()
-            val firebaseUser = authResult.user ?: throw Exception("Firebase user is null")
+            val firebaseUser = authResult.user ?: return false
             val uid = firebaseUser.uid
 
             tokenManager.saveTokens(uid, "firebase_refresh_token", uid)
@@ -98,19 +114,8 @@ class FirebaseAuthRepository @Inject constructor(
             true
         } catch (e: Exception) {
             e.printStackTrace()
-            // Fallback for demo logins (e.g. admin@citecircle.com or offline development)
-            val nameFromEmail = email.substringBefore("@").split(".").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
-            val localUser = User(
-                id = "u_${System.currentTimeMillis()}",
-                name = if (nameFromEmail.isNotBlank()) nameFromEmail else "Scholar",
-                role = UserRole.STUDENT,
-                institution = "CiteCircle Affiliate"
-            )
-            tokenManager.saveTokens("demo_access_token", "demo_refresh_token", localUser.id)
-            tokenManager.saveUserEmail(email)
-            userRepository.updateCurrentUser(localUser)
-            addSavedAccountSession(localUser, email, "demo_access_token", "demo_refresh_token")
-            true
+            // Strictly fail authentication on invalid password or missing account
+            false
         }
     }
 
@@ -121,7 +126,7 @@ class FirebaseAuthRepository @Inject constructor(
 
         return try {
             val authResult = firebaseAuth.createUserWithEmailAndPassword(email, password).await()
-            val firebaseUser = authResult.user ?: throw Exception("Firebase user creation failed")
+            val firebaseUser = authResult.user ?: return false
             val uid = firebaseUser.uid
 
             val newUser = User(
@@ -154,19 +159,11 @@ class FirebaseAuthRepository @Inject constructor(
             true
         } catch (e: Exception) {
             e.printStackTrace()
-            val fallbackUser = User(
-                id = "u_${System.currentTimeMillis()}",
-                name = nameFromEmail,
-                role = role,
-                institution = "CiteCircle Network"
-            )
-            tokenManager.saveTokens("demo_access_token", "demo_refresh_token", fallbackUser.id)
-            tokenManager.saveUserEmail(email)
-            userRepository.updateCurrentUser(fallbackUser)
-            addSavedAccountSession(fallbackUser, email, "demo_access_token", "demo_refresh_token")
-            true
+            // Strictly fail signup on invalid credentials or error
+            false
         }
     }
+
 
     override suspend fun logout() {
         runCatching { firebaseAuth.signOut() }

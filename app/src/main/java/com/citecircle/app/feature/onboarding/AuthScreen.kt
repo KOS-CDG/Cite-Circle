@@ -54,18 +54,19 @@ class AuthViewModel @Inject constructor(
         _selectedRole.value = role
     }
 
-    fun authenticate(email: String, onComplete: () -> Unit) {
+    fun authenticate(email: String, passwordInput: String, onResult: (Boolean) -> Unit) {
         viewModelScope.launch {
             _isLoading.value = true
-            if (_isLoginMode.value) {
-                authRepository.login(email, "password")
+            val success = if (_isLoginMode.value) {
+                authRepository.login(email, passwordInput)
             } else {
-                authRepository.signup(email, "password", _selectedRole.value)
+                authRepository.signup(email, passwordInput, _selectedRole.value)
             }
             _isLoading.value = false
-            onComplete()
+            onResult(success)
         }
     }
+
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -199,12 +200,18 @@ fun AuthScreen(
             onClick = {
                 if (email.isBlank() || !email.contains("@")) {
                     emailError = "Please enter a valid institution email"
+                } else if (password.isBlank()) {
+                    emailError = "Please enter your password"
                 } else {
-                    viewModel.authenticate(email) {
-                        if (isLoginMode) {
-                            onSkipSetup() // bypass setup wizard for login
+                    viewModel.authenticate(email, password) { success ->
+                        if (success) {
+                            if (isLoginMode) {
+                                onSkipSetup() // bypass setup wizard for login
+                            } else {
+                                onAuthSuccess() // trigger wizard for new signup
+                            }
                         } else {
-                            onAuthSuccess() // trigger wizard for new signup
+                            emailError = "Invalid email or password. Please check your credentials."
                         }
                     }
                 }
@@ -234,7 +241,7 @@ fun AuthScreen(
         // Social Buttons
         CcSecondaryButton(
             text = "Continue with ORCID iD",
-            onClick = { viewModel.authenticate("orcid@orcid.org", onAuthSuccess) },
+            onClick = { viewModel.authenticate("orcid@orcid.org", "password") { onAuthSuccess() } },
             icon = null,
             modifier = Modifier.fillMaxWidth()
         )
@@ -243,7 +250,7 @@ fun AuthScreen(
 
         CcSecondaryButton(
             text = "Continue with Google",
-            onClick = { viewModel.authenticate("google@gmail.com", onAuthSuccess) },
+            onClick = { viewModel.authenticate("google@gmail.com", "password") { onAuthSuccess() } },
             icon = null,
             modifier = Modifier.fillMaxWidth()
         )
@@ -272,7 +279,7 @@ fun AuthScreen(
                 onClick = {
                     email = "admin@citecircle.com"
                     password = "password"
-                    viewModel.authenticate(email) {
+                    viewModel.authenticate(email, password) {
                         onSkipSetup()
                     }
                 },
@@ -284,7 +291,7 @@ fun AuthScreen(
                 onClick = {
                     email = "dummy@citecircle.com"
                     password = "password"
-                    viewModel.authenticate(email) {
+                    viewModel.authenticate(email, password) {
                         onSkipSetup()
                     }
                 },
