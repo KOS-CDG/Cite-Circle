@@ -26,7 +26,10 @@ import com.citecircle.app.core.model.PostFlair
 import com.citecircle.app.core.model.PostType
 import com.citecircle.app.core.data.PostRepository
 import com.citecircle.app.core.data.UserRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -43,24 +46,24 @@ class ComposerViewModel @Inject constructor(
     private val userRepository: UserRepository
 ) : ViewModel() {
     fun createCirclePost(circle: Circle, content: String, flair: PostFlair, pdfName: String?, onComplete: () -> Unit) {
-        viewModelScope.launch {
-            userRepository.getCurrentUser().collect { currentUser ->
-                val newPost = Post(
-                    id = "post_${System.currentTimeMillis()}",
-                    author = currentUser,
-                    content = content,
-                    type = PostType.DISCUSSION,
-                    flair = flair,
-                    circleId = circle.id,
-                    circleName = circle.name,
-                    timestamp = System.currentTimeMillis()
-                )
-                postRepository.createPost(newPost)
-                onComplete()
-                return@collect
-            }
+        onComplete()
+        viewModelScope.launch(Dispatchers.IO) {
+            val currentUser = userRepository.getCurrentUser().first()
+            val newPost = Post(
+                id = "post_${System.currentTimeMillis()}",
+                author = currentUser,
+                content = content,
+                type = PostType.DISCUSSION,
+                flair = flair,
+                circleId = circle.id,
+                circleName = circle.name,
+                timestamp = System.currentTimeMillis()
+            )
+            postRepository.createPost(newPost)
         }
     }
+
+
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

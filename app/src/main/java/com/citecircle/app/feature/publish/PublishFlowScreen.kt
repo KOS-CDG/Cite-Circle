@@ -191,14 +191,9 @@ fun PublishFlowScreen(
                             viewModel.updateDraft { updated }
                             viewModel.setStep(3)
                             viewModel.runAiReview {}
-                        },
-                        onQuickPublish = { updated ->
-                            viewModel.updateDraft { updated }
-                            viewModel.publishPaper {
-                                viewModel.setStep(4)
-                            }
                         }
                     )
+
 
                     3 -> Step3AiReview(
                         progress = progress,
@@ -325,9 +320,9 @@ fun Step2Details(
     draft: PaperDraft,
     onDraftChange: (PaperDraft) -> Unit,
     onBack: () -> Unit,
-    onContinue: (PaperDraft) -> Unit,
-    onQuickPublish: (PaperDraft) -> Unit = {}
+    onContinue: (PaperDraft) -> Unit
 ) {
+
 
     var title by remember { mutableStateOf(draft.title) }
     var abstract by remember { mutableStateOf(draft.abstract) }
@@ -462,34 +457,20 @@ fun Step2Details(
         Spacer(modifier = Modifier.weight(1f))
         Spacer(modifier = Modifier.height(32.dp))
 
-        Column(
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
+            CcSecondaryButton(text = "Back", onClick = onBack, modifier = Modifier.weight(1f).padding(end = 12.dp))
             CcPrimaryButton(
-                text = "Publish Immediately ⚡",
+                text = "Continue",
                 onClick = {
                     val updated = draft.copy(title = title, abstract = abstract, pdfFileName = pdfName)
-                    onQuickPublish(updated)
+                    onContinue(updated)
                 },
                 enabled = title.isNotBlank() && abstract.isNotBlank() && pdfName != null,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.weight(1f)
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                CcSecondaryButton(text = "Back", onClick = onBack, modifier = Modifier.weight(1f).padding(end = 6.dp))
-                CcSecondaryButton(
-                    text = "Run AI Review Scan",
-                    onClick = {
-                        val updated = draft.copy(title = title, abstract = abstract, pdfFileName = pdfName)
-                        onContinue(updated)
-                    },
-                    enabled = title.isNotBlank() && abstract.isNotBlank() && pdfName != null,
-                    modifier = Modifier.weight(1.3f).padding(start = 6.dp)
-                )
-            }
         }
     }
 }
@@ -515,9 +496,7 @@ fun Step3AiReview(
         when (progress) {
             is AiReviewStage.InProgress -> {
                 Column(
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .padding(horizontal = 32.dp),
+                    modifier = Modifier.align(Alignment.Center),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     AiPencilProgress()
@@ -533,15 +512,9 @@ fun Step3AiReview(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.ccColors.marginGray
                     )
-                    Spacer(modifier = Modifier.height(24.dp))
-                    CcPrimaryButton(
-                        text = "Skip Scan & Publish Now ⚡",
-                        onClick = onPublish,
-                        isLoading = isPublishing,
-                        modifier = Modifier.fillMaxWidth()
-                    )
                 }
             }
+
 
             is AiReviewStage.Complete -> {
                 if (report != null) {

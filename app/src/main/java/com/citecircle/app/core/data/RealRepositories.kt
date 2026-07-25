@@ -722,6 +722,7 @@ class RealPostRepository @Inject constructor(
 
     // Local cache enriched with author User objects
     private val _userCache = mutableMapOf<String, User>()
+    private val _createdPostsCache = MutableStateFlow<List<Post>>(emptyList())
 
     private suspend fun resolveAuthor(authorId: String): User {
         return _userCache.getOrPut(authorId) {
@@ -733,11 +734,12 @@ class RealPostRepository @Inject constructor(
     override fun getFeedPosts(): Flow<List<Post>> = flow {
         val posts = try {
             val dtos = api.getFeedPosts()
-            dtos.map { dto -> dto.toDomain(resolveAuthor(dto.authorId)) }
+            val remote = dtos.map { dto -> dto.toDomain(resolveAuthor(dto.authorId)) }
+            (_createdPostsCache.value + remote).distinctBy { it.id }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            FakeDataSource.posts
+            (_createdPostsCache.value + FakeDataSource.posts).distinctBy { it.id }
         }
         emit(posts)
     }
@@ -755,6 +757,11 @@ class RealPostRepository @Inject constructor(
     }
 
     override fun getPostById(id: String): Flow<Post?> = flow {
+        val cached = _createdPostsCache.value.find { it.id == id }
+        if (cached != null) {
+            emit(cached)
+            return@flow
+        }
         val post = try {
             val dto = api.getPost(id)
             dto.toDomain(resolveAuthor(dto.authorId))
@@ -773,7 +780,9 @@ class RealPostRepository @Inject constructor(
     override fun getPostsForCircle(circleId: String): Flow<List<Post>> = flow {
         val posts = try {
             val dtos = api.getCirclePosts(circleId)
-            dtos.map { dto -> dto.toDomain(resolveAuthor(dto.authorId)) }
+            val remote = dtos.map { dto -> dto.toDomain(resolveAuthor(dto.authorId)) }
+            val localCirclePosts = _createdPostsCache.value.filter { it.circleId == circleId }
+            (localCirclePosts + remote).distinctBy { it.id }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -781,8 +790,6 @@ class RealPostRepository @Inject constructor(
         }
         emit(posts)
     }
-
-
 
     override suspend fun endorsePost(postId: String): Boolean {
         return try {
@@ -798,8 +805,8 @@ class RealPostRepository @Inject constructor(
         } catch (e: Exception) { false }
     }
 
-
     override suspend fun createPost(post: Post): Boolean {
+        _createdPostsCache.value = listOf(post) + _createdPostsCache.value
         return try {
             api.createPost(
                 PostCreateDto(
@@ -814,6 +821,7 @@ class RealPostRepository @Inject constructor(
             true
         } catch (e: Exception) { false }
     }
+
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

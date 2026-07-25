@@ -166,28 +166,26 @@ class QuickPostViewModel @Inject constructor(
         val state = _uiState.value
         if (!state.canSubmit) return
 
-        _uiState.update { it.copy(isPosting = true) }
-        viewModelScope.launch {
-            val post = Post(
-                id = "post_qp_${System.currentTimeMillis()}",
-                author = author,
-                content = state.text.trim(),
-                type = if (state.citedPaper != null) PostType.PAPER_SHARE else PostType.DISCUSSION,
-                flair = state.flair,
-                circleId = state.selectedCircle?.id,
-                circleName = state.selectedCircle?.name,
-                attachedPaper = state.citedPaper
-            )
-            val success = postRepository.createPost(post)
-            if (success) {
-                draftSaveJob?.cancel()
-                dataStore.edit { prefs -> prefs.remove(QUICK_POST_DRAFT_KEY) }
-                _uiState.update { it.copy(isPosting = false, createdPost = post) }
-            } else {
-                _uiState.update { it.copy(isPosting = false) }
-            }
+        val post = Post(
+            id = "post_qp_${System.currentTimeMillis()}",
+            author = author,
+            content = state.text.trim(),
+            type = if (state.citedPaper != null) PostType.PAPER_SHARE else PostType.DISCUSSION,
+            flair = state.flair,
+            circleId = state.selectedCircle?.id,
+            circleName = state.selectedCircle?.name,
+            attachedPaper = state.citedPaper
+        )
+
+        draftSaveJob?.cancel()
+        _uiState.update { it.copy(isPosting = false, createdPost = post) }
+
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            dataStore.edit { prefs -> prefs.remove(QUICK_POST_DRAFT_KEY) }
+            postRepository.createPost(post)
         }
     }
+
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
