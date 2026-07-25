@@ -557,6 +557,11 @@ interface CiteCircleApi {
     @POST("posts")
     suspend fun createPost(@Body body: PostCreateDto): PostDto
 
+    @Multipart
+    @POST("posts/upload-file")
+    suspend fun uploadPostFile(@Part file: MultipartBody.Part): Map<String, @JvmSuppressWildcards Any>
+
+
     @POST("posts/{postId}/endorse")
     suspend fun toggleEndorse(@Path("postId") postId: String): EndorseResponseDto
 

@@ -88,7 +88,9 @@ fun PostComposerSheet(
     var selectedPdfName by remember { mutableStateOf<String?>(null) }
     var selectedPdfSize by remember { mutableStateOf<String?>(null) }
 
-    // Real device PDF picker
+    // Real device file picker with 10 MB limit and ZIP rejection validation
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
     val pdfPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -99,24 +101,43 @@ fun PostComposerSheet(
             )
             val cursor = context.contentResolver.query(uri, projection, null, null, null)
             var displayName = uri.lastPathSegment ?: "document.pdf"
-            var sizeKb: Long? = null
+            var sizeBytes: Long? = null
             cursor?.use { c ->
                 if (c.moveToFirst()) {
                     val nameIndex = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
                     val sizeIndex = c.getColumnIndex(android.provider.OpenableColumns.SIZE)
                     if (nameIndex >= 0) displayName = c.getString(nameIndex)
-                    if (sizeIndex >= 0) sizeKb = c.getLong(sizeIndex) / 1024L
+                    if (sizeIndex >= 0) sizeBytes = c.getLong(sizeIndex)
                 }
             }
+
+            val lowerName = displayName.lowercase()
+            val invalidExtensions = listOf(".zip", ".rar", ".7z", ".tar", ".gz", ".tgz", ".zipx")
+            if (invalidExtensions.any { lowerName.endswith(it) }) {
+                errorMessage = "ZIP and archive files are invalid for posting. Please upload PDF or image files."
+                android.widget.Toast.makeText(context, errorMessage, android.widget.Toast.LENGTH_LONG).show()
+                return@rememberLauncherForActivityResult
+            }
+
+            val maxSizeBytes = 10 * 1024 * 1024L // 10 MB
+            if (sizeBytes != null && sizeBytes > maxSizeBytes) {
+                errorMessage = "File exceeds the 10 MB maximum limit for posting."
+                android.widget.Toast.makeText(context, errorMessage, android.widget.Toast.LENGTH_LONG).show()
+                return@rememberLauncherForActivityResult
+            }
+
+            errorMessage = null
+            val sizeKb = if (sizeBytes != null) sizeBytes / 1024L else null
             val sizeLabel = when {
                 sizeKb == null  -> ""
-                sizeKb!! < 1024 -> "${sizeKb} KB"
-                else            -> "${"%.1f".format(sizeKb!! / 1024.0)} MB"
+                sizeKb < 1024   -> "${sizeKb} KB"
+                else            -> "${"%.1f".format(sizeKb / 1024.0)} MB"
             }
             selectedPdfName = displayName
             selectedPdfSize = sizeLabel
         }
     }
+
 
     val scrollState = rememberScrollState()
 
