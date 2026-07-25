@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "950471050443",
+    "project_id": "citecircle",
+    "storage_bucket": "citecircle.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:950471050443:android:a3327d92d9961068ae074e",
+        "android_client_info": {
+          "package_name": "com.citecircle.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAqBvaghYrLkAmlATvKs-PUJxb9XcXSaDA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:950471050443:android:a3327d92d9961068ae074e",
+        "android_client_info": {
+          "package_name": "com.dhale.citecircle"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAqBvaghYrLkAmlATvKs-PUJxb9XcXSaDA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

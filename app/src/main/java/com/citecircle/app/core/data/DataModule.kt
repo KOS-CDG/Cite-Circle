@@ -75,7 +75,8 @@ class DataStoreThemeRepository(private val dataStore: DataStore<Preferences>) : 
 @InstallIn(SingletonComponent::class)
 abstract class RepositoryModule {
     @Binds @Singleton
-    abstract fun bindPostRepository(impl: RealPostRepository): PostRepository
+    abstract fun bindPostRepository(impl: FirestorePostRepository): PostRepository
+
 
     @Binds @Singleton
     abstract fun bindPaperRepository(impl: RealPaperRepository): PaperRepository
@@ -84,7 +85,8 @@ abstract class RepositoryModule {
     abstract fun bindCircleRepository(impl: RealCircleRepository): CircleRepository
 
     @Binds @Singleton
-    abstract fun bindUserRepository(impl: RealUserRepository): UserRepository
+    abstract fun bindUserRepository(impl: FirestoreUserRepository): UserRepository
+
 
     @Binds @Singleton
     abstract fun bindCommentRepository(impl: RealCommentRepository): CommentRepository
@@ -105,7 +107,7 @@ abstract class RepositoryModule {
     abstract fun bindSearchRepository(impl: RealSearchRepository): SearchRepository
 
     @Binds @Singleton
-    abstract fun bindAuthRepository(impl: RealAuthRepository): AuthRepository
+    abstract fun bindAuthRepository(impl: FirebaseAuthRepository): AuthRepository
 }
 
 @Module
@@ -122,7 +124,16 @@ object DataModule {
     @Provides @Singleton
     fun provideTokenManager(@ApplicationContext context: Context): TokenManager =
         TokenManager(context)
+
+    @Provides @Singleton
+    fun provideFirebaseAuth(): com.google.firebase.auth.FirebaseAuth =
+        com.google.firebase.auth.FirebaseAuth.getInstance()
+
+    @Provides @Singleton
+    fun provideFirebaseFirestore(): com.google.firebase.firestore.FirebaseFirestore =
+        com.google.firebase.firestore.FirebaseFirestore.getInstance()
 }
+
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Network Rate Limiter Interceptor
